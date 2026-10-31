@@ -2,6 +2,8 @@
 // the tab title is the signal ("Done · Decluttering"). A notification is shown only when the tab is hidden: if the
 // person is looking at the page, the page itself says it is done.
 
+import { t } from '../../i18n';
+
 export type NotifyChoice = 'off' | 'notify' | 'title';
 
 /** The parts of the Notification API we use, so tests can pass a fake. */
@@ -28,12 +30,12 @@ export function notifyDone(
   N: NotificationLike | undefined = real(),
 ): boolean {
   if (choice !== 'notify' || !o.hidden || !N || N.permission !== 'granted') return false;
-  try { new N('Decluttering: scan finished', { body: o.body, tag: 'decluttering-scan' }); return true; } catch { return false; }
+  try { new N(t('scan.notify.finished-title'), { body: o.body, tag: 'decluttering-scan' }); return true; } catch { return false; }
 }
 
 /** What the card says once they've chosen. */
 export function notifyNote(choice: NotifyChoice): string {
-  if (choice === 'notify') return 'We’ll send you a notification when it’s done. Leave this tab open and come back.';
-  if (choice === 'title') return 'Notifications are off for this site, so watch the tab title for “Done”.';
-  return '';
+  if (choice === 'notify') return t('scan.notify.note-notify');
+  if (choice === 'title') return t('scan.notify.note-title');
+  return t('scan.notify.note-off');
 }

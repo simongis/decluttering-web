@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ADMIN_PRIVILEGES, CAPABILITY_SUMMARY, NO_ADMIN_EMAIL, SEND_PRIVILEGES, accessMode, canSeeUsage, capabilities, emailCapability, privilegesOfMode } from './access';
+import { setLocale } from '../i18n';
 
 describe('emailCapability (DC-121)', () => {
   it('is ticked and shows the address when one is on file', () => {
@@ -63,6 +64,14 @@ describe('canSeeUsage', () => {
 });
 
 describe('capabilities (DC-111)', () => {
+  it('localizes the checklist copy in Spanish', async () => {
+    await setLocale('es', false);
+    try {
+      expect(capabilities([...ADMIN_PRIVILEGES, ...SEND_PRIVILEGES], true, true, true).summary).toBe('Todo listo: puedes revisar y enviar.');
+      expect(emailCapability('')?.label).toBe('Tu dirección de correo');
+      expect(emailCapability('')?.line).toBe('Tu perfil de ArcGIS Online no tiene una dirección de correo, así que no hay dónde enviarte una prueba. Agrega una en tu perfil y vuelve aquí.');
+    } finally { await setLocale('en', false); }
+  });
   const view = [...ADMIN_PRIVILEGES], send = [...SEND_PRIVILEGES];
   const ids = (c: ReturnType<typeof capabilities>) => Object.fromEntries(c.items.map((i) => [i.id, i.state]));
   const cases: Array<[string, string[], boolean, boolean, boolean]> = [];

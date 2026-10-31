@@ -4,6 +4,7 @@
 import { DAY, fmtDate, fmtInt } from './format';
 import { families, familyUse } from './stale';
 import type { Data, Family, LoggedSend, Service } from './types';
+import { t, tn } from '../i18n';
 
 /** First match wins, in this order. */
 export type Outcome = 'gone' | 'handedOver' | 'updated' | 'used' | 'noChange' | 'notChecked';
@@ -11,7 +12,9 @@ export const OUTCOMES: readonly Outcome[] = ['gone', 'handedOver', 'updated', 'u
 export type OutcomeCounts = Record<Outcome, number>;
 
 export const OUTCOME_LABEL: Record<Outcome, string> = {
-  gone: 'No longer in your org', handedOver: 'Handed over', updated: 'Updated', used: 'Used again', noChange: 'No change yet', notChecked: 'Not checked',
+  get gone() { return t('domain.outcome.gone'); }, get handedOver() { return t('domain.outcome.handedOver'); },
+  get updated() { return t('domain.outcome.updated'); }, get used() { return t('domain.outcome.used'); },
+  get noChange() { return t('domain.outcome.noChange'); }, get notChecked() { return t('domain.outcome.notChecked'); },
 };
 export const USED_AGAIN_TIP = 'Someone used it after the nudge; it may still be needed.';
 
@@ -104,43 +107,43 @@ export function sinceNudges(data: Data, sends: readonly LoggedSend[] | null | un
   return { owners: [...owners.values()], latest: (newestFirst[0] as LoggedSend).sentAt, counts, credits, exact };
 }
 
-const plural = (n: number, one: string, many: string) => `${fmtInt(n)} ${n === 1 ? one : many}`;
+const plural = (n: number, key: 'layers' | 'owners') => tn(key === 'layers' ? 'common.unit.layers' : 'common.unit.owners', n, { count: fmtInt(n) });
 const credit = (c: number) => (c < 10 ? c.toFixed(1) : fmtInt(c));
-const creditWords = (c: number, exact: boolean) => `${exact ? '' : 'about '}${credit(c)} credits a month`;
+const creditWords = (c: number, exact: boolean) => t(exact ? 'domain.outcome.creditWordsExact' : 'domain.outcome.creditWordsApprox', { credits: credit(c) });
 
 /** The non-gone parts, e.g. ["5 updated", "3 used again", "20 no change yet"]. */
 export function outcomeParts(c: OutcomeCounts): string[] {
   const p: string[] = [];
-  if (c.handedOver) p.push(`${fmtInt(c.handedOver)} handed over`);
-  if (c.updated) p.push(`${fmtInt(c.updated)} updated`);
-  if (c.used) p.push(`${fmtInt(c.used)} used again`);
-  if (c.noChange) p.push(`${fmtInt(c.noChange)} no change yet`);
-  if (c.notChecked) p.push(`${fmtInt(c.notChecked)} not checked`);
+  if (c.handedOver) p.push(tn('domain.outcome.count.handedOver', c.handedOver, { count: fmtInt(c.handedOver) }));
+  if (c.updated) p.push(tn('domain.outcome.count.updated', c.updated, { count: fmtInt(c.updated) }));
+  if (c.used) p.push(tn('domain.outcome.count.used', c.used, { count: fmtInt(c.used) }));
+  if (c.noChange) p.push(tn('domain.outcome.count.noChange', c.noChange, { count: fmtInt(c.noChange) }));
+  if (c.notChecked) p.push(tn('domain.outcome.count.notChecked', c.notChecked, { count: fmtInt(c.notChecked) }));
   return p;
 }
 
 /** "12 layers no longer in your org, about 140 credits a month", or null when none are gone. */
 export function goneWords(c: OutcomeCounts, credits: number, exact: boolean): string | null {
   if (!c.gone) return null;
-  const n = plural(c.gone, 'layer', 'layers');
-  return credits >= 0.05 ? `${n} no longer in your org, ${creditWords(credits, exact)}` : `${n} no longer in your org`;
+  const layers = plural(c.gone, 'layers');
+  return credits >= 0.05 ? t('domain.outcome.goneWords', { layers, credits: creditWords(credits, exact) }) : t('domain.outcome.goneOnly', { layers });
 }
 
 /** The card's line: "Since you nudged 14 owners (latest 17 Oct 2026): 12 layers no longer in your org, about 140 credits a month · 5 updated · …". */
 export function sinceLine(s: SinceNudges): string {
   const parts = [goneWords(s.counts, s.credits, s.exact), ...outcomeParts(s.counts)].filter((x): x is string => !!x);
-  return `Since you nudged ${plural(s.owners.length, 'owner', 'owners')} (latest ${fmtDate(s.latest)}): ${parts.join(' · ')}`;
+  return t('domain.outcome.sinceLine', { owners: plural(s.owners.length, 'owners'), date: fmtDate(s.latest), parts: parts.join(' · ') });
 }
 
 /** The owner chip's extra words, e.g. "2 of 4 gone"; null when nothing is gone. */
 export function ownerChip(o: OwnerOutcome): string | null {
-  return o.counts.gone ? `${fmtInt(o.counts.gone)} of ${fmtInt(o.items.length)} gone` : null;
+  return o.counts.gone ? t('domain.outcome.ownerChip', { gone: fmtInt(o.counts.gone), total: fmtInt(o.items.length) }) : null;
 }
 
 /** The scan finish line's one clause, or null when nothing nudged is gone. */
 export function finishClause(s: Pick<SinceNudges, 'credits' | 'exact'> & { counts: Pick<OutcomeCounts, 'gone'> } | null): string | null {
   if (!s?.counts.gone) return null;
   return s.credits >= 0.05
-    ? `Since your last nudges: ${creditWords(s.credits, s.exact)} saved.`
-    : `Since your last nudges: ${plural(s.counts.gone, 'layer', 'layers')} no longer in your org.`;
+    ? t('domain.outcome.finishSaved', { credits: creditWords(s.credits, s.exact) })
+    : t('domain.outcome.finishGone', { layers: plural(s.counts.gone, 'layers') });
 }

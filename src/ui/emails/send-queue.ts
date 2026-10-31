@@ -1,6 +1,7 @@
 // DC-019: the real-send queue. One owner at a time (add -> notify -> remove happens inside `send`, the notifier's
 // sendToOwner). Pause takes effect between owners, never halfway through one, so nobody is left in the group by a pause.
 // Pure: no DOM; the send function and the change listener are injected, so tests use a fake.
+import { t } from '../../i18n';
 import { sendErrorText } from './toast-copy';
 
 export type QueuePhase = 'waiting' | 'sending' | 'done' | 'failed' | 'skipped' | 'not-added';
@@ -60,7 +61,7 @@ export interface SendQueue {
 }
 
 // Plain words for ArcGIS refusals (COM_1132 and friends), shown on the Stopped panel and per owner.
-const msg = (e: unknown): string => sendErrorText(e) || 'Something went wrong';
+const msg = (e: unknown): string => sendErrorText(e) || t('emails.error.generic');
 
 export function createSendQueue(entries: QueueEntry[], send: SendFn, onChange: (e: QueueEvent) => void = () => {}, opts: QueueOptions = {}): SendQueue {
   const gapMs = opts.gapMs ?? 0;
@@ -86,8 +87,8 @@ export function createSendQueue(entries: QueueEntry[], send: SendFn, onChange: (
       const r = await send(item.username, item.subject, item.html);
       item.notRemoved = r.notRemoved ?? [];
       item.phase = r.notAdded ? 'not-added' : r.sent ? 'done' : 'failed';
-      if (item.phase === 'not-added') item.error = 'ArcGIS Online couldn’t add them to the group, so nothing was sent';
-      else if (item.phase === 'failed') item.error = 'ArcGIS Online didn’t confirm the email';
+      if (item.phase === 'not-added') item.error = t('emails.queue.add.failed');
+      else if (item.phase === 'failed') item.error = t('emails.queue.send.unconfirmed');
     } catch (e) {
       item.phase = 'failed';
       item.error = msg(e);
@@ -177,11 +178,11 @@ export function createSendQueue(entries: QueueEntry[], send: SendFn, onChange: (
 export function tidyLine(r: { removed: string[]; notRemoved: string[] }): string | null {
   const n = r.removed.length;
   if (!n) return null;
-  return `Tidied the group: ${n === 1 ? '1 person' : `${n} people`} left over from an earlier run ${n === 1 ? 'was' : 'were'} taken out.`;
+  return t(n === 1 ? 'emails.tidy.one' : 'emails.tidy.other', { count: n });
 }
 
 /** DC-068: shown when ArcGIS Online wouldn't take someone out of the group. */
 export function tidyWarning(r: { notRemoved: string[] }): string | null {
   const n = r.notRemoved.length;
-  return n ? `${n === 1 ? '1 person' : `${n} people`} left over from an earlier run couldn't be taken out of the hidden group (${r.notRemoved.join(', ')}). You can remove them in ArcGIS Online under Groups. Nobody in the group is emailed unless they're in this run.` : null;
+  return n ? t(n === 1 ? 'emails.tidy.warning.one' : 'emails.tidy.warning.other', { count: n, users: r.notRemoved.join(', ') }) : null;
 }

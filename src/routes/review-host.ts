@@ -12,7 +12,9 @@ import '../ui/sankey/dc-sankey';
 import '@esri/calcite-components/dist/components/calcite-button';
 import '@esri/calcite-components/dist/components/calcite-dialog';
 import { RESCAN_ASK_MS, sayRescan } from '../ui/scan/estimate';
-import { credit, plural } from '../ui/shared/text';
+import { credit } from '../ui/shared/text';
+import { formatNumber, t, tn } from '../i18n';
+import { LocaleController } from '../i18n/controller';
 import { go, type Route } from './router';
 import { setEmailSelection } from './email-selection';
 import { applyNudgeLog, getNudgeLog, getNudgeSends, onNudgeLogChange, readSeededLog, setNudgeLog } from '../log';
@@ -35,6 +37,7 @@ export interface ReviewProps { data: Data; mode: AccessMode; canSeeUsage: boolea
 
 @customElement('app-review')
 export class AppReview extends LitElement {
+  private readonly _locale = new LocaleController(this);
   @property({ attribute: false }) data!: Data;
   @property() mode: AccessMode = 'admin';
   @property({ type: Boolean }) canSeeUsage = true;
@@ -135,16 +138,16 @@ export class AppReview extends LitElement {
     const r = this.rescan;
     if (!r) return nothing;
     return html`<calcite-button data-action="rescan" appearance="transparent" kind="neutral" scale="s" icon-start="refresh"
-      label="Rescan ${this.data.org.name}: read every layer, map and app again" @click=${this.rescanClick}>Rescan</calcite-button>`;
+      label=${t('shell.review.rescanLabel', { org: this.data.org.name })} @click=${this.rescanClick}>${t('shell.review.rescan')}</calcite-button>`;
   }
 
   private rescanDialog() {
     if (!this.rescan) return nothing;
-    return html`<calcite-dialog data-dialog="rescan" modal heading="Rescan ${this.data.org.name}?" width-scale="s" .open=${this.rescanAsk}
+    return html`<calcite-dialog data-dialog="rescan" modal heading=${t('shell.review.rescanHeading', { org: this.data.org.name })} width-scale="s" .open=${this.rescanAsk}
       @calciteDialogClose=${() => { if (this.rescanAsk) this.rescanNotNow(); }}>
-      <p>This reads every layer, map and app again: ${sayRescan(this.rescan)}. You can keep using Review while it runs.</p>
-      <calcite-button slot="footer-start" data-action="rescan-cancel" appearance="transparent" kind="neutral" @click=${this.rescanNotNow}>Not now</calcite-button>
-      <calcite-button slot="footer-end" data-action="rescan-go" icon-start="refresh" @click=${this.rescanGo}>Rescan</calcite-button>
+      <p>${t('shell.review.rescanDescription', { estimate: sayRescan(this.rescan) })}</p>
+      <calcite-button slot="footer-start" data-action="rescan-cancel" appearance="transparent" kind="neutral" @click=${this.rescanNotNow}>${t('shell.review.notNow')}</calcite-button>
+      <calcite-button slot="footer-end" data-action="rescan-go" icon-start="refresh" @click=${this.rescanGo}>${t('shell.review.rescan')}</calcite-button>
     </calcite-dialog>`;
   }
 
@@ -165,10 +168,10 @@ export class AppReview extends LitElement {
   private actionBar() {
     if (this.mode !== 'admin' || this.selection.solo) return nothing;
     const s = this.selection, n = s.owners.length;
-    return html`<div class="actionbar" data-bar="review" role="region" aria-label="Next step">
-      <div class="actionbar-sum"><b data-bar-main>${n ? `${plural(n, 'owner', 'owners')} ticked · ${plural(s.services, 'service', 'services')} in their digests · ≈ ${credit(s.credits)} credits a month` : 'No one ticked yet'}</b>
-        <span>${n ? 'One email per owner. Nothing is sent until you choose.' : 'Tick an owner to start writing emails.'}</span></div>
-      <calcite-button data-action="to-emails" icon-end="arrow-right" ?disabled=${n === 0} @click=${this.next}>Next: write the emails</calcite-button>
+    return html`<div class="actionbar" data-bar="review" role="region" aria-label=${t('shell.review.nextStep')}>
+      <div class="actionbar-sum"><b data-bar-main>${n ? tn('shell.review.ownerSummary', n, { count: formatNumber(n), services: tn('shell.review.serviceCount', s.services, { count: formatNumber(s.services) }), credits: credit(s.credits) }) : t('shell.review.noOwners')}</b>
+        <span>${n ? t('shell.review.nothingSent') : t('shell.review.tickOwner')}</span></div>
+      <calcite-button data-action="to-emails" icon-end="arrow-right" ?disabled=${n === 0} @click=${this.next}>${t('shell.review.nextEmails')}</calcite-button>
     </div>`;
   }
 
@@ -201,7 +204,7 @@ export class AppReview extends LitElement {
           ${this.mode === 'my-items' ? nothing : html`<dc-sankey slot="chart" .owners=${owners} .selected=${this.selected}></dc-sankey>`}
           <!-- DC-090: always rendered (dc-review moves it into its page head, so it must not come and go) -->
           <div slot="context" class="rescan-ctx">
-            <p data-note="cache" role="status" ?hidden=${!this.note}>${this.note}${this.note && this.refreshing ? (this.depsKnown ? ' · refreshing in the background…' : ' · still checking which maps and apps use them…') : ''}</p>
+            <p data-note="cache" role="status" ?hidden=${!this.note}>${this.note}${this.note && this.refreshing ? (this.depsKnown ? t('shell.review.refreshing', { note: this.note }) : t('shell.review.checkingDependencies', { note: this.note })) : ''}</p>
             ${this.rescanControl()}
           </div>
         </dc-review>

@@ -2,12 +2,13 @@
 import type { Thresholds } from '../../domain/types';
 import { fmtInt } from '../../domain/format';
 import { NO_STORAGE_MB } from './dots';
+import { t, tn } from '../../i18n';
 
 export type LensId = 'stale' | 'big' | 'used';
-export const LENSES: { id: LensId; label: string; note: string }[] = [
-  { id: 'stale', label: 'How stale', note: 'Across: last updated. Up: last used. Shaded: the stale zone.' },
-  { id: 'big', label: 'How big', note: 'Across: storage. Up: how stale.' },
-  { id: 'used', label: 'Used by maps', note: 'Columns: maps and apps using it. Up: how stale.' },
+export const LENSES: { id: LensId; readonly label: string; readonly note: string }[] = [
+  { id: 'stale', get label() { return t('scan.lens.stale'); }, get note() { return t('scan.lens.stale-note'); } },
+  { id: 'big', get label() { return t('scan.lens.big'); }, get note() { return t('scan.lens.big-note'); } },
+  { id: 'used', get label() { return t('scan.lens.used'); }, get note() { return t('scan.lens.used-note'); } },
 ];
 
 export const clamp = (v: number, a = 0, b = 1): number => Math.min(b, Math.max(a, v));
@@ -209,10 +210,10 @@ export function sizeBand(dots: readonly { sized: boolean; sizeMB: number }[]): {
   let unmeasured = 0, none = 0;
   for (const d of dots) { if (!d.sized) unmeasured++; else if (d.sizeMB < SIZE_LO) none++; }
   const f = fmtInt;
-  if (unmeasured && none) return { label: 'minimal or not measured', note: `${f(unmeasured)} not measured yet, ${f(none)} with minimal storage` };
-  if (unmeasured) return { label: 'not measured yet', note: `${f(unmeasured)} not measured yet` };
+  if (unmeasured && none) return { label: t('scan.size.minimal-or-unmeasured'), note: t('scan.size.combine', { unmeasured: tn('scan.size.unmeasured-count', unmeasured, { count: f(unmeasured) }), minimal: tn('scan.size.minimal-count', none, { count: f(none) }) }) };
+  if (unmeasured) return { label: t('scan.size.unmeasured'), note: tn('scan.size.unmeasured-count', unmeasured, { count: f(unmeasured) }) };
   // Under 0.1 MB: a hosted view has none of its own, a tiny layer a little, so "minimal", not "no storage" (user, 2026-10-23).
-  return { label: 'minimal', note: none ? `${f(none)} with minimal storage` : '' };
+  return { label: t('scan.size.minimal'), note: none ? tn('scan.size.minimal-count', none, { count: f(none) }) : '' };
 }
 
 /** A stable jitter index from an item id (FNV-1a), so a dot keeps its place when the floor or a merge removes others. */

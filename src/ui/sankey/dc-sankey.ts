@@ -1,14 +1,14 @@
 import { LitElement, css, html, nothing, svg } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { LocaleController } from '../../i18n/controller';
+import { t } from '../../i18n';
 import { sankey, sankeyLinkHorizontal } from 'd3-sankey';
 import '@esri/calcite-components/dist/components/calcite-chip';
 import '@esri/calcite-components/dist/components/calcite-tooltip';
 import type { OwnerGroup } from '../../domain/types';
-import { fmtInt } from '../../domain/format';
+import { credit, plural } from '../shared/text';
 import { shapeSankey, type SankeyOwner } from './shape';
 
-const credit = (c: number): string => (c < 10 ? c.toFixed(1) : fmtInt(c));
-const plural = (n: number, a: string, b: string): string => `${fmtInt(n)} ${n === 1 ? a : b}`;
 
 interface NodeDatum { id: string; kind: 'owner' | 'clear' | 'risk'; owner?: SankeyOwner }
 interface LinkDatum { owner: string }
@@ -22,6 +22,7 @@ const W_MIN = 600;
 /** Owners -> "Stale, on their own" / "Stale, but used by maps or apps", valued in credits a month. */
 @customElement('dc-sankey')
 export class DcSankey extends LitElement {
+  private readonly _locale = new LocaleController(this);
   @property({ attribute: false }) owners: OwnerGroup[] = [];
   /** Selected owner username, or null. */
   @property() selected: string | null = null;
@@ -93,8 +94,8 @@ export class DcSankey extends LitElement {
     // No credits to draw (sizes not measured yet, or views only): d3-sankey would divide by a zero total (DC-053).
     if (!shape.links.length) {
       return html`<p class="sub" data-chart="empty">${this.owners.some((o) => o.unmeasured)
-        ? 'The chart appears once storage has been measured.'
-        : 'These items have no storage of their own, so there are no credits to chart.'}</p>`;
+        ? t('review.chart.emptyMeasuring')
+        : t('review.chart.emptyNoStorage')}</p>`;
     }
     const W = this.W;
     const H = Math.max(200, shape.owners.length * 30 + 60);
@@ -115,7 +116,7 @@ export class DcSankey extends LitElement {
       ${selected && !selected.other ? html`<div class="chips">
         <calcite-chip closable scale="s" kind="brand" appearance="outline-fill"
           @calciteChipClose=${() => this.select(null)}>${selected.label}</calcite-chip></div>` : nothing}
-      <svg viewBox="0 0 ${W} ${H}" role="group" aria-label="Credits a month by owner"
+      <svg viewBox="0 0 ${W} ${H}" role="group" aria-label=${t('review.aria.chartCredits')}
         class=${this.hovered ? 'hovering' : ''}>
         <g>${graph.links.map((l) => {
           const t = l.target as unknown as NodeDatum;
@@ -128,10 +129,10 @@ export class DcSankey extends LitElement {
           return d.kind === 'owner' ? this.ownerNode(d) : this.statNode(d, shape.totals[d.kind]);
         })}</g>
       </svg>
-      ${shape.owners.map((o) => html`<calcite-tooltip placement="top" close-on-click data-for=${o.id}>
+      ${shape.owners.map((o) => html`<calcite-tooltip placement="top" overlay-positioning="fixed" close-on-click data-for=${o.id}>
         <b>${o.other ? plural(o.count ?? 0, 'other owner', 'other owners') : o.label}</b><br>
-        ${plural(o.services, 'service', 'services')} · ≈ ${credit(o.credits)} credits a month
-        ${o.other ? nothing : html`<br>Click to filter the list`}</calcite-tooltip>`)}`;
+        ${t('review.sankey.tooltip', { services: plural(o.services, 'service', 'services'), credits: credit(o.credits) })}
+        ${o.other ? nothing : html`<br>${t('review.chart.clickToFilter')}`}</calcite-tooltip>`)}`;
   }
 
   private ownerNode(d: NodeDatum & Laid) {
@@ -139,8 +140,8 @@ export class DcSankey extends LitElement {
     const cy = (d.y0 + d.y1) / 2;
     const sel = o.id === this.selected;
     const label = o.other
-      ? `${o.label}: ${plural(o.count ?? 0, 'owner', 'owners')}, ${credit(o.credits)} credits a month`
-      : `${o.label}, ${plural(o.services, 'service', 'services')}, ${credit(o.credits)} credits a month. Filter list.`;
+      ? t('review.sankey.ownerOther', { label: o.label, count: plural(o.count ?? 0, 'owner', 'owners'), credits: credit(o.credits) })
+      : t('review.sankey.ownerLabel', { label: o.label, services: plural(o.services, 'service', 'services'), credits: credit(o.credits) });
     const tx = o.other ? d.x0 - 8 : d.x0 - 22;
     return svg`<g class="node ${o.other ? 'static' : ''} ${sel ? 'sel' : ''} ${this.hovered && this.hovered !== o.id ? 'dim' : ''}"
       data-node=${o.id}
@@ -152,18 +153,18 @@ export class DcSankey extends LitElement {
       @keydown=${o.other ? nothing : (e: KeyboardEvent) => this.onKey(e, o.id)}>
       <rect class="bar" x=${d.x0} y=${d.y0} width=${d.x1 - d.x0} height=${Math.max(1, d.y1 - d.y0)} rx="2" style="fill:var(--_nudged)"></rect>
       <rect class="focus" x="4" y=${Math.min(d.y0, cy - 12) - 2} width=${d.x1 - 4} height=${Math.max(d.y1 - d.y0, 24) + 4} rx="4"></rect>
-      <text x=${tx} y=${cy} dy="0.32em" text-anchor="end"><tspan class="nm">${o.label}</tspan><tspan class="sub"> · ${credit(o.credits)} credits</tspan></text>
+      <text x=${tx} y=${cy} dy="0.32em" text-anchor="end"><tspan class="nm">${o.label}</tspan><tspan class="sub"> · ${t('review.sankey.creditAmount', { amount: credit(o.credits) })}</tspan></text>
       ${o.other ? nothing : svg`<polyline class="chev" points="${d.x0 - 14},${cy - 4} ${d.x0 - 9},${cy} ${d.x0 - 14},${cy + 4}"></polyline>`}
     </g>`;
   }
 
-  private statNode(d: NodeDatum & Laid, t: { credits: number; services: number }) {
+  private statNode(d: NodeDatum & Laid, totals: { credits: number; services: number }) {
     const clear = d.kind === 'clear';
     const cy = (d.y0 + d.y1) / 2;
     return svg`<g>
       <rect class="bar" x=${d.x0} y=${d.y0} width=${d.x1 - d.x0} height=${Math.max(1, d.y1 - d.y0)} rx="2" style="fill:${clear ? 'var(--_stale)' : 'var(--_risk)'}"></rect>
-      <text x=${d.x1 + 8} y=${cy} dy="-0.1em">${clear ? 'Stale, on their own' : 'Stale, but used by maps or apps'}</text>
-      <text class="sub" x=${d.x1 + 8} y=${cy} dy="1.05em">${credit(t.credits)} credits · ${plural(t.services, 'service', 'services')}</text>
+      <text x=${d.x1 + 8} y=${cy} dy="-0.1em">${t(clear ? 'review.sankey.clear' : 'review.sankey.risk')}</text>
+      <text class="sub" x=${d.x1 + 8} y=${cy} dy="1.05em">${t('review.sankey.stat', { credits: credit(totals.credits), services: plural(totals.services, 'service', 'services') })}</text>
     </g>`;
   }
 }

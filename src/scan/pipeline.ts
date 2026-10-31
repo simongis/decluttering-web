@@ -383,6 +383,7 @@ export async function scanCore(request: RequestFn, opts: ScanOptions): Promise<C
     if (s.description) svc.description = str(s.description);
     if (s.snippet) svc.snippet = str(s.snippet);
     if (Array.isArray(s.tags)) svc.tags = (s.tags as unknown[]).map(String);
+    if (typeof s.contentStatus === 'string' && s.contentStatus) svc.contentStatus = s.contentStatus;
     return svc;
   });
 

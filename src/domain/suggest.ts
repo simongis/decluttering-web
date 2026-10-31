@@ -1,6 +1,7 @@
 // The Suggested preset (DC-034, docs/research/adaptive-presets.md), ported from prototype D (model.js). Pure TS: no DOM.
 import type { Data, Thresholds } from './types';
 import { PRESETS, matchPreset, scoredFamilies, span, unusedFor, type PresetName, type UseInfo } from './stale';
+import { formatNumber, t, tn } from '../i18n';
 
 /**
  * [minDaysSinceUse, minDaysSinceUpdate, maxUsedBy], gentlest to strictest (DC-083: last used and last updated, 1 year
@@ -104,14 +105,14 @@ export function suggest(data: Data, { depsKnown = true, countSweeps = false }: {
   return null;
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
 /** One plain sentence about a suggestion, built from the result of suggest(); a capped one adds a sentence that says so. */
 export function suggestSentence(s: Suggestion): string {
-  const t = s.thresholds, share = Math.max(1, Math.round(s.total / Math.max(1, s.flagged)));
-  const by = t.maxUsedBy === 0 ? 'used by no maps or apps' : `used by at most ${plural(t.maxUsedBy, 'map or app', 'maps or apps')}`;
-  const main = `Suggested for your org: about 1 in ${share} services (${plural(s.flagged, 'service', 'services')} across ${plural(s.owners, 'owner', 'owners')}), those nobody has used for more than ${span(t.minDaysSinceUse)}, last updated more than ${span(t.minDaysSinceUpdate)} ago, ${by}, and at least ${t.minSizeMB ?? 0} MB.`;
-  return s.capped
-    ? `${main} That is still more than ${SUGGEST.ownerCap} owners, even at ${t.minSizeMB ?? 0} MB, so you might like to send the digests in a few batches.`
-    : main;
+  const thresholds = s.thresholds, share = Math.max(1, Math.round(s.total / Math.max(1, s.flagged)));
+  const by = thresholds.maxUsedBy === 0 ? t('domain.suggest.by.none') : t(thresholds.maxUsedBy === 1 ? 'domain.suggest.by.one' : 'domain.suggest.by.other', { count: formatNumber(thresholds.maxUsedBy) });
+  const main = t('domain.suggest.main', {
+    share, flagged: tn('common.unit.services', s.flagged, { count: formatNumber(s.flagged) }),
+    owners: tn('common.unit.owners', s.owners, { count: formatNumber(s.owners) }),
+    useSpan: span(thresholds.minDaysSinceUse), updateSpan: span(thresholds.minDaysSinceUpdate), by, size: thresholds.minSizeMB ?? 0,
+  });
+  return s.capped ? `${main}${t('domain.suggest.capped', { cap: SUGGEST.ownerCap, size: thresholds.minSizeMB ?? 0 })}` : main;
 }

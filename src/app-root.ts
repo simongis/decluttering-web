@@ -19,7 +19,7 @@ import { buildDots, type DotModel, type EarlyUsage, type FoundItem } from './ui/
 import './ui/scan/dc-scan-screen';
 import { beginSignIn, fetchUserThumbnail, handleRedirect, isOAuthReturn, loadAccess, loadSession, signOut, takeReturnTo, type AccessInfo } from './auth/session';
 import { canSeeUsage } from './auth/access';
-import { SENDING_UNAVAILABLE_LINE } from './auth/access';
+import { oauthMessageFor, parseOAuthError } from './auth/oauth-error';
 import { CLIENT_ID } from './auth/config';
 import type { RequestFn } from './scan/types';
 import { mergeUsageWindow } from './scan/pipeline';
@@ -28,6 +28,13 @@ import { currentSkin, onSkinChange, setSkin, SKIN_COPY } from './ui/skin/skin';
 import { DELTA_ICON, SUN_ICON } from './ui/skin/icons';
 import '@esri/calcite-components/dist/components/calcite-navigation-user';
 import '@esri/calcite-components/dist/components/calcite-avatar';
+import '@esri/calcite-components/dist/components/calcite-select';
+import '@esri/calcite-components/dist/components/calcite-option';
+import { LOCALES, LOCALE_NAMES, applyProfileLocale, getLocale, isLocale, setLocale, t, tn } from './i18n';
+import '@esri/calcite-components/dist/components/calcite-link';
+import '@esri/calcite-components/dist/components/calcite-segmented-control';
+import '@esri/calcite-components/dist/components/calcite-segmented-control-item';
+import { LocaleController } from './i18n/controller';
 import '@esri/calcite-components/dist/components/calcite-popover';
 import './ui/about';
 import './ui/access/dc-access-checklist';
@@ -60,6 +67,7 @@ function demoFast(): boolean {
 /** App shell: landing, demo, the signed-in scan screen, the review screen and the sign-in error page. */
 @customElement('app-root')
 export class AppRoot extends LitElement {
+  private readonly _locale = new LocaleController(this);
   @state() private route: Route = parseRoute(window.location.hash);
   /** DC-135: the console look is on (the header then offers the way back). */
   @state() private consoleSkin = currentSkin() === 'console';
@@ -71,6 +79,7 @@ export class AppRoot extends LitElement {
   @state() private error = '';
   @state() private access: AccessInfo | null = null;
   @state() private signInError = '';
+  private oauthErrorForLocale: { error: string; description: string } | null = null;
   @state() private busy = false;
   /**
    * DC-088 (FB-37): set before the first paint when this load returns from ArcGIS sign-in, or restores a session on the
@@ -90,6 +99,13 @@ export class AppRoot extends LitElement {
   @state() private turnOnOpen = false;
   @state() private turnOnBusy = false;
   @state() private turnOnError = '';
+  @state() private turnOnErrorKey: 'missingPrivilege' | 'turnOnFailed' | null = null;
+  private turnOnPrivilege = '';
+  private get turnOnErrorText(): string {
+    if (this.turnOnErrorKey === 'missingPrivilege') return t('shell.error.missingPrivilege', { privilege: this.turnOnPrivilege });
+    if (this.turnOnErrorKey === 'turnOnFailed') return t('shell.error.turnOnFailed');
+    return this.turnOnError;
+  }
   @state() private turnOffOpen = false;
   @state() private turnOffBusy = false;
   @state() private turnOffError = '';
@@ -102,9 +118,17 @@ export class AppRoot extends LitElement {
   private reviewMounted = false;
   @state() private data: Data | null = null;
   @state() private note = '';
+  private noteKind: 'partial' | 'fresh' | null = null;
+  private noteRefreshFailed = false;
+  private get noteText(): string {
+    const base = this.noteKind === 'partial' ? t('shell.scan.partialRefresh') : this.noteKind === 'fresh' ? t('shell.scan.freshlyScanned') : this.note;
+    return this.noteRefreshFailed ? t('shell.scan.refreshFailed', { note: base }) : base;
+  }
   @state() private refreshing = false;
   @state() private depsKnown = true;
   @state() private scanError = '';
+  private scanErrorStopped = false;
+  private get scanErrorText(): string { return this.scanErrorStopped ? t('shell.scan.stoppedError') : this.scanError; }
   /** DC-064: scanning -> background (core in) -> done | stopped | error, and which screen shows (scan-flow.ts). */
   @state() private flow: Flow = INITIAL_FLOW;
   /** DC-071b: the scan's three-stage progress (DC-071a), for the current line, the bar and the stage list. */
@@ -229,13 +253,14 @@ export class AppRoot extends LitElement {
     void this.ensureDemo();
     if (import.meta.env.DEV && await this.maybeSimulate()) { this.signingIn = false; return; }
     if (import.meta.env.DEV && /^#\/probe-usage\/?$/.test(window.location.hash)) { await (await import('./dev/usage-probe')).defineUsageProbe(); this.probe = true; this.signingIn = false; return; }
+    const oauthQueryError = parseOAuthError(window.location.search);
     const ret = await handleRedirect();
     // The demo's scan owns the page: a saved sign-in elsewhere must not start a real scan beside it.
     if (this.demoPlay && ret.kind === 'none') { this.signingIn = false; return; }
     // A page elsewhere on this origin asked to come back after sign-in: go there and start nothing here.
     const back = ret.kind === 'none' ? null : takeReturnTo();
     if (ret.kind === 'signed-in' && back) { window.location.replace(back); return; }
-    if (ret.kind === 'error') { this.signInError = ret.message; this.navigate('error'); this.signingIn = false; return; }
+    if (ret.kind === 'error') { this.oauthErrorForLocale = oauthQueryError; this.signInError = ret.message; this.navigate('error'); this.signingIn = false; return; }
     const manager = ret.kind === 'signed-in' ? ret.manager : loadSession();
     if (!manager) {
       this.signingIn = false;
@@ -246,6 +271,7 @@ export class AppRoot extends LitElement {
     this.busy = true;
     try {
       this.access = await loadAccess(manager);
+      await applyProfileLocale(this.access.culture, this.access.orgCulture);
       this.orgName = this.access.orgName;
       this.accessCard = true;
       void this.refreshSendingOn();
@@ -291,6 +317,26 @@ export class AppRoot extends LitElement {
     super.disconnectedCallback();
   }
 
+  private onLang = (e: Event) => {
+    const v = (e.target as HTMLInputElement).value;
+    if (isLocale(v)) void setLocale(v);
+  };
+
+  /**
+   * ADR 0015: the language lives in the account menu, not the header (most people never change it). Each name is written in its
+   * own language and marked with its lang; no flags. Hidden when there is only one language.
+   */
+  private renderLangRow() {
+    if (LOCALES.length < 2) return nothing;
+    return html`<div class="dc-user-lang">
+      <span class="dc-user-lang-label" id="dc-lang-label">${t('lang.label')}</span>
+      <calcite-segmented-control data-action="language" scale="s" width="full" aria-labelledby="dc-lang-label" label=${t('lang.label')}
+        @calciteSegmentedControlChange=${this.onLang}>
+        ${LOCALES.map((l) => html`<calcite-segmented-control-item value=${l} lang=${l} ?checked=${l === getLocale()}>${LOCALE_NAMES[l]}</calcite-segmented-control-item>`)}
+      </calcite-segmented-control>
+    </div>`;
+  }
+
   /**
    * DC-113 (FB-69): the short first-visit tour of Review (lazy chunk, src/ui/tour/). It opens by itself once, only while Review is on
    * screen (not on the scan screen, and never in the quick demo), and "Show me around" in the user menu opens it again.
@@ -324,7 +370,10 @@ export class AppRoot extends LitElement {
       else if (tries < 8) this.tourCheck(tries + 1);
     }, tries === 0 ? 900 : 700);
   }
-  protected override updated(): void { this.tourCheck(); }
+  protected override updated(): void {
+    this.tourCheck();
+    if (this.scanTitle) document.title = t(this.scanTitle === 'stopped' ? 'shell.scan.titleStopped' : 'shell.scan.titleDone', { title: APP_TITLE });
+  }
   private showMeAround = () => {
     this.userOpen = false;
     window.setTimeout(async () => { if (await openReviewTour({ solo: isSolo(), onEnd: this.tourEnded })) { this.tourOpen = true; this.tourDone = true; } }, 200);
@@ -336,7 +385,7 @@ export class AppRoot extends LitElement {
     if (!demoFast()) { this.demoPlay = true; await this.startDemoScan(); return; }
     try {
       const res = await fetch(`${import.meta.env.BASE_URL}demo/mock-small.json`);
-      if (!res.ok) throw new Error(`Demo data failed to load (${res.status})`);
+      if (!res.ok) throw new Error(t('shell.demo.dataFailed', { status: res.status }));
       const data = (await res.json()) as Data;
       this.orgName = data.org.name;
       this.demoData = data;
@@ -372,6 +421,7 @@ export class AppRoot extends LitElement {
   /** The last scan's result as a cache entry, kept so Resume (DC-102) picks up where a stopped scan left off without re-reading. */
   private lastEntry: CacheEntry | null = null;
   /** DC-105: when the results on screen were saved, and whether the last background refresh failed (the two things Rescan's show rule needs). */
+  private scanTitle: 'done' | 'stopped' | null = null;
   @state() private savedAt = '';
   @state() private refreshFailed = false;
 
@@ -411,6 +461,8 @@ export class AppRoot extends LitElement {
     const fake = !!this.simulated || !!demo;
     this.scanning = true;
     this.scanError = '';
+    this.scanErrorStopped = false;
+    this.scanTitle = null;
     this.stages = null;
     this.refreshFailed = false;
     // A rescan keeps the last result's full-scan time (for the estimate) until its own scan replaces it.
@@ -432,6 +484,8 @@ export class AppRoot extends LitElement {
     if (cached) {
       this.data = cached.entry.data;
       this.note = cached.note;
+      this.noteKind = null;
+      this.noteRefreshFailed = false;
       this.savedAt = cached.entry.savedAt;
       this.lastEntry = cached.entry;
       this.refreshing = true;
@@ -481,9 +535,12 @@ export class AppRoot extends LitElement {
       this.savedAt = out.entry.savedAt;
       this.data = out.data;
       this.depsKnown = out.depsComplete;
-      document.title = out.stopped ? `Stopped · ${APP_TITLE}` : `Done · ${APP_TITLE}`;
-      if (!out.stopped) notifyDone(this.notify, { hidden: document.hidden, body: 'The scan has finished. Come back and have a look at what we found.' });
-      this.note = cached || rescan ? (out.stopped ? 'Partly refreshed just now' : 'Freshly scanned just now') : '';
+      this.scanTitle = out.stopped ? 'stopped' : 'done';
+      document.title = out.stopped ? t('shell.scan.titleStopped', { title: APP_TITLE }) : t('shell.scan.titleDone', { title: APP_TITLE });
+      if (!out.stopped) notifyDone(this.notify, { hidden: document.hidden, body: t('shell.scan.finishedNotice') });
+      this.noteKind = cached || rescan ? (out.stopped ? 'partial' : 'fresh') : null;
+      this.noteRefreshFailed = false;
+      this.note = this.noteKind ? t(this.noteKind === 'partial' ? 'shell.scan.partialRefresh' : 'shell.scan.freshlyScanned') : '';
       this.refreshDots();
       this.step({ type: 'finished', stopped: out.stopped });
       if (this.demoSkipping && !out.stopped) this.step({ type: 'review' });
@@ -494,8 +551,8 @@ export class AppRoot extends LitElement {
         totalMs: Math.round(performance.now() - t0),
       };
     } catch (e) {
-      if ((e as Error).name === 'AbortError') this.scanError = 'The scan was stopped.';
-      else if (cached || rescan) { this.note += ' · couldn’t refresh just now'; this.refreshFailed = true; }
+      if ((e as Error).name === 'AbortError') { this.scanErrorStopped = true; this.scanError = t('shell.scan.stoppedError'); }
+      else if (cached || rescan) { this.noteRefreshFailed = true; this.refreshFailed = true; }
       else this.scanError = e instanceof Error ? e.message : String(e);
       this.step({ type: 'failed' });
     } finally {
@@ -509,7 +566,7 @@ export class AppRoot extends LitElement {
 
   /** Stop: before the core it cancels the scan; after it, it ends the background work and keeps what is known (DC-053). */
   private stopButton() {
-    const label = this.background ? 'Stop and review what we have' : 'Stop scanning';
+    const label = this.background ? t('shell.scan.stopAndReview') : t('shell.scan.stopScanning');
     return html`<calcite-button data-action="stop" class="stop" appearance="outline" kind="brand" icon-start="stop-square-f" @click=${() => this.abort?.abort()}>${label}</calcite-button>`;
   }
 
@@ -519,16 +576,16 @@ export class AppRoot extends LitElement {
       if (this.stages?.finished) return nothing;
       const text = currentLine(this.stages);
       return html`<div data-scan="background" style="display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; margin-bottom: 0.75rem">
-        <span class="dc-sr" role="status">Still checking in the background.</span>
+        <span class="dc-sr" role="status">${t('shell.scan.checkingBackground')}</span>
         <span>${text}</span>
-        <span class="scan-meta" data-scan="meta">${this.stages?.percent ?? 0}% done${this.eta ? ` · ${this.eta.text}` : ''}</span>
+        <span class="scan-meta" data-scan="meta">${t('shell.scan.percentDone', { percent: this.stages?.percent ?? 0 })}${this.eta ? ` · ${this.eta.text}` : ''}</span>
         ${this.stopButton()}
-        <calcite-button data-action="to-scan" appearance="transparent" kind="brand" icon-start="arrow-left" @click=${() => this.step({ type: 'scan' })}>Back to the scan</calcite-button></div>`;
+        <calcite-button data-action="to-scan" appearance="transparent" kind="brand" icon-start="arrow-left" @click=${() => this.step({ type: 'scan' })}>${t('shell.scan.backToScan')}</calcite-button></div>`;
     }
     if (this.stopped) {
       return html`<div data-note="stopped" role="status" style="display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; margin-bottom: 0.75rem">
-        <span>The scan stopped early: some sizes aren’t measured and some maps and apps aren’t checked.</span>
-        <calcite-button data-action="resume-link" appearance="transparent" kind="brand" icon-start="play" label="Resume the scan, stopped at ${this.stages?.percent ?? 0} percent" @click=${this.resumeScan}>Scan stopped at ${this.stages?.percent ?? 0}% · Resume</calcite-button></div>`;
+        <span>${t('shell.scan.stoppedEarly')}</span>
+        <calcite-button data-action="resume-link" appearance="transparent" kind="brand" icon-start="play" label=${t('shell.scan.resumeLabel', { percent: this.stages?.percent ?? 0 })} @click=${this.resumeScan}>${t('shell.scan.stoppedResume', { percent: this.stages?.percent ?? 0 })}</calcite-button></div>`;
     }
     return nothing;
   }
@@ -559,6 +616,7 @@ export class AppRoot extends LitElement {
     this.turnOffOpen = this.turnOffBusy = this.offToast = false;
     this.turnOffError = '';
     this.reviewMounted = false;
+    this.scanTitle = null;
     document.title = APP_TITLE;
     this.navigate('landing');
   }
@@ -592,8 +650,8 @@ export class AppRoot extends LitElement {
     return html`
       <div slot="user" class="dc-user">
         <calcite-navigation-user id="dc-user" data-user=${demo ? 'demo' : 'signed-in'} full-name=${fullName} username=${username}
-          .thumbnail=${thumb} ?text-disabled=${this.narrow} ?active=${this.userOpen} label=${`Account menu for ${fullName}`}></calcite-navigation-user>
-        <calcite-popover reference-element="dc-user" label="Account" placement="bottom-end" overlay-positioning="fixed" auto-close
+          .thumbnail=${thumb} ?text-disabled=${this.narrow} ?active=${this.userOpen} label=${t('shell.account.menuLabel', { name: fullName })}></calcite-navigation-user>
+        <calcite-popover reference-element="dc-user" label=${t('shell.account.popoverLabel')} placement="bottom-end" overlay-positioning="fixed" auto-close
           @calcitePopoverOpen=${() => { this.userOpen = true; }} @calcitePopoverClose=${() => { this.userOpen = false; }}>
           <div class="dc-user-menu" data-menu="user">
             <div class="dc-user-who">
@@ -604,15 +662,16 @@ export class AppRoot extends LitElement {
                 ${org ? html`<p class="dc-user-org" data-user-org>${org}</p>` : nothing}
               </div>
             </div>
+            ${this.renderLangRow()}
             <div class="dc-user-actions">
-              ${this.reviewOnScreen() ? html`<calcite-button data-action="show-tour" width="full" appearance="transparent" icon-start="lightbulb" @click=${this.showMeAround}>Show me around</calcite-button>` : nothing}
+              ${this.reviewOnScreen() ? html`<calcite-button data-action="show-tour" width="full" appearance="transparent" icon-start="lightbulb" @click=${this.showMeAround}>${t('shell.account.showTour')}</calcite-button>` : nothing}
               ${demo ? html`
-                <calcite-button data-action="leave-demo" width="full" appearance="outline" icon-start="sign-out" @click=${() => { this.userOpen = false; this.navigate('landing'); }}>Leave the demo</calcite-button>`
+                <calcite-button data-action="leave-demo" width="full" appearance="outline" icon-start="sign-out" @click=${() => { this.userOpen = false; this.navigate('landing'); }}>${t('shell.account.leaveDemo')}</calcite-button>`
               : html`
-                <calcite-button data-action="access-open" width="full" appearance="transparent" icon-start="question" @click=${() => { this.userOpen = false; this.accessOpen = true; void this.refreshSendingOn(); }}>What can I do here?</calcite-button>
-                <calcite-button data-action="sign-out-keep" width="full" appearance="outline" icon-start="sign-out" @click=${() => this.doSignOut(false)}>Sign out</calcite-button>
-                <calcite-button data-action="sign-out-clear" width="full" appearance="transparent" icon-start="trash" @click=${() => this.doSignOut(true)}>Sign out and clear saved data</calcite-button>
-                <p class="dc-user-hint">Clearing removes saved scans and settings from this browser. Nothing in your org changes.</p>`}
+                <calcite-button data-action="access-open" width="full" appearance="transparent" icon-start="question" @click=${() => { this.userOpen = false; this.accessOpen = true; void this.refreshSendingOn(); }}>${t('shell.account.accessQuestion')}</calcite-button>
+                <calcite-button data-action="sign-out-keep" width="full" appearance="outline" icon-start="sign-out" @click=${() => this.doSignOut(false)}>${t('shell.account.signOut')}</calcite-button>
+                <calcite-button data-action="sign-out-clear" width="full" appearance="transparent" icon-start="trash" @click=${() => this.doSignOut(true)}>${t('shell.account.signOutClear')}</calcite-button>
+                <p class="dc-user-hint">${t('shell.account.clearDataHint')}</p>`}
             </div>
           </div>
         </calcite-popover>
@@ -622,13 +681,15 @@ export class AppRoot extends LitElement {
   private renderLanding() {
     return html`
       <section data-page="landing">
-        <h1>Tidy up your ArcGIS Online content, gently</h1>
-        <p>Find hosted feature services nobody seems to use, and gently nudge their owners. Nothing is ever deleted.</p>
+        <h1>${t('shell.landing.title')}</h1>
+        <p>${t('shell.landing.description')}</p>
         <p style="display: flex; gap: 0.75rem">
-          <calcite-button data-action="sign-in" ?disabled=${!CLIENT_ID} @click=${() => beginSignIn()}>Sign in with ArcGIS Online</calcite-button>
-          <calcite-button data-action="demo" appearance="outline" @click=${() => go('demo')}>Try the demo</calcite-button>
+          <calcite-button data-action="sign-in" ?disabled=${!CLIENT_ID} @click=${() => beginSignIn()}>${t('shell.landing.signIn')}</calcite-button>
+          <calcite-button data-action="demo" appearance="outline" @click=${() => go('demo')}>${t('shell.landing.tryDemo')}</calcite-button>
         </p>
-        ${CLIENT_ID ? nothing : html`<p role="note" data-note="no-client-id">Sign-in is off in this build (no client ID set). The demo still works.</p>`}
+        ${CLIENT_ID ? nothing : html`<p role="note" data-note="no-client-id">${t('shell.landing.noClientId')}</p>`}
+        ${LOCALES.length > 1 ? html`<p class="dc-landing-lang" data-action="landing-language">${LOCALES.filter((l) => l !== getLocale()).map((l) =>
+          html`<calcite-link lang=${l} data-locale=${l} @click=${() => void setLocale(l)}>${LOCALE_NAMES[l]}</calcite-link>`)}</p>` : nothing}
       </section>`;
   }
 
@@ -656,8 +717,8 @@ export class AppRoot extends LitElement {
       ${onScan ? html`
         ${this.renderScan(a)}
         <p data-note="demo-scan" style="display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; align-items: center; margin-top: 1rem">
-          <span>This is a demo: a made-up org of ${demo.org.world.services.length} feature layers. Nothing here is real.</span>
-          ${running ? html`<calcite-button data-action="skip-demo" scale="s" appearance="transparent" kind="neutral" icon-end="chevrons-right" @click=${this.skipDemo}>Skip to results</calcite-button>` : nothing}
+          <span>${tn('shell.demo.notice', demo.org.world.services.length)}</span>
+          ${running ? html`<calcite-button data-action="skip-demo" scale="s" appearance="transparent" kind="neutral" icon-end="chevrons-right" @click=${this.skipDemo}>${t('shell.demo.skipToResults')}</calcite-button>` : nothing}
         </p>` : nothing}
       ${data && (!onScan || this.reviewMounted) ? html`
       <div ?hidden=${onScan || emails}>
@@ -674,7 +735,7 @@ export class AppRoot extends LitElement {
       <dc-scan-screen .mode=${a.mode} .orgName=${a.orgName} .fullName=${a.fullName} .flow=${this.flow.state}
         .stages=${this.stages} .model=${this.dots} .org=${this.data?.org ?? { urlKey: '' }} .eta=${this.eta} .notify=${this.notify}
         .aside=${this.accessCard && !this.demoOrg ? html`<dc-access-checklist dismissible announce .mode=${a.mode} .usageReadable=${a.usageReadable} .mayOptIn=${a.writable} .optedIn=${this.sendingOn} .email=${a.email} @dc-turn-on-sending=${this.askTurnOn} @dc-turn-off-sending=${this.askTurnOff} @dc-access-dismiss=${() => { this.accessCard = false; }}></dc-access-checklist>` : nothing}
-        .error=${this.scanError} ?depsKnown=${this.depsKnown && this.flow.state !== 'scanning'}
+        .error=${this.scanErrorText} ?depsKnown=${this.depsKnown && this.flow.state !== 'scanning'}
         @dc-scan-notify=${(e: CustomEvent<NotifyChoice>) => { this.notify = e.detail; }}
         @dc-count-sweeps=${(e: CustomEvent<boolean>) => { const id = this.access?.orgId ?? this.data?.org.id; if (id) setCountSweeps(id, e.detail); }}
         @dc-scan-review=${() => this.step({ type: 'review' })}
@@ -721,6 +782,7 @@ export class AppRoot extends LitElement {
   private askTurnOn = (): void => {
     if (!this.appData()) return;
     this.turnOnError = '';
+    this.turnOnErrorKey = null;
     this.accessOpen = false;
     this.turnOnOpen = true;
   };
@@ -729,13 +791,15 @@ export class AppRoot extends LitElement {
     if (!n || !a || this.turnOnBusy) return;
     this.turnOnBusy = true;
     this.turnOnError = '';
+    this.turnOnErrorKey = null;
     try {
       const r = await n.canCreateGroup();
-      if (!r.ok) throw new Error(`Your ArcGIS Online role doesn’t have ${r.missing || 'the “Create groups” privilege'}, and sending needs one small hidden group.`);
+      if (!r.ok) { this.turnOnPrivilege = r.missing || t('shell.error.createGroupPrivilege'); this.turnOnErrorKey = 'missingPrivilege'; return; }
       await n.createGroup();
       if (this.access === a) { this.sendingOn = true; this.turnOnOpen = false; }
     } catch (e) {
-      this.turnOnError = e instanceof Error ? e.message : 'We couldn’t turn sending on just now. You can try again.';
+      if (e instanceof Error) this.turnOnError = e.message;
+      else this.turnOnErrorKey = 'turnOnFailed';
     } finally {
       this.turnOnBusy = false;
     }
@@ -784,7 +848,7 @@ export class AppRoot extends LitElement {
   }
 
   private renderSignedIn(view: 'app' | 'review' | 'emails') {
-    if (this.busy || !this.access) return html`<p data-page="loading">Checking your access…</p>`;
+    if (this.busy || !this.access) return html`<p data-page="loading">${t('shell.access.loading')}</p>`;
     const a = this.access, data = this.data;
     const onScan = view === 'app' || !data;
     return html`
@@ -793,8 +857,8 @@ export class AppRoot extends LitElement {
       <div ?hidden=${onScan || view === 'emails'}>
       ${this.renderScanStatus()}
       <div data-scan-state=${this.stopped ? 'stopped' : this.background ? 'running' : 'done'} data-read-only=${String(!a.writable)}>
-        ${!a.writable && a.mode !== 'my-items' ? html`<p role="note" data-note="read-only">${SENDING_UNAVAILABLE_LINE}</p>` : nothing}
-        ${renderReview({ data, mode: a.mode, canSeeUsage: canSeeUsage(a.usageReadable), username: a.username, note: this.note, refreshing: this.refreshing, depsKnown: this.depsKnown, stopped: this.stopped, rescan: this.rescanOffer, onRescan: this.rescan })}
+        ${!a.writable && a.mode !== 'my-items' ? html`<p role="note" data-note="read-only">${t('shell.access.readOnly')}</p>` : nothing}
+        ${renderReview({ data, mode: a.mode, canSeeUsage: canSeeUsage(a.usageReadable), username: a.username, note: this.noteText, refreshing: this.refreshing, depsKnown: this.depsKnown, stopped: this.stopped, rescan: this.rescanOffer, onRescan: this.rescan })}
       </div>
       </div>` : nothing}
       ${view === 'emails' && !onScan ? html`<app-emails ?demo=${!!this.simulated} .manager=${this.manager} .admin=${{ name: a.fullName || a.username, username: a.username, ...(a.email !== undefined ? { email: a.email } : {}) }} orgId=${a.orgId} orgName=${a.orgName} ?writable=${a.writable}></app-emails>` : nothing}`;
@@ -812,17 +876,17 @@ export class AppRoot extends LitElement {
   private renderSigningIn() {
     return html`
       <section data-page="signing-in" role="status" aria-live="polite">
-        <h1>Signing you in…</h1>
-        <p>Checking your ArcGIS Online access.</p>
+        <h1>${t('shell.signing.title')}</h1>
+        <p>${t('shell.signing.description')}</p>
       </section>`;
   }
 
   private renderError() {
     return html`
       <section data-page="error" role="alert">
-        <h1>We couldn’t sign you in</h1>
-        <p>${this.signInError || 'Something went wrong while signing in.'}</p>
-        <calcite-button @click=${() => go('landing')}>Back to the start</calcite-button>
+        <h1>${t('shell.error.title')}</h1>
+        <p>${this.oauthErrorForLocale ? oauthMessageFor(this.oauthErrorForLocale.error, this.oauthErrorForLocale.description) : this.signInError || t('shell.error.generic')}</p>
+        <calcite-button @click=${() => go('landing')}>${t('shell.error.back')}</calcite-button>
       </section>`;
   }
 
@@ -868,19 +932,18 @@ export class AppRoot extends LitElement {
     }
     return html`
       <calcite-shell @dc-selection-change=${(e: CustomEvent<{ owners: string[] }>) => { this.ticked = e.detail.owners.length; }}>
-        <calcite-navigation slot="header" label="Decluttering">
-          <div slot="logo" class="dc-logo"><a class="dc-home" data-action="home" href=${hrefOf(homeRoute(this.route, this.signedIn))} aria-label="Decluttering, home" @click=${this.goHome}><img src="${import.meta.env.BASE_URL}${this.consoleSkin ? 'brand-mark-console.svg' : 'brand-mark.svg'}" alt=""><span class="dc-name">Decluttering</span></a>${this.orgName ? html`<span class="dc-org">${this.orgName}</span>` : nothing}</div>
+        <calcite-navigation slot="header" label=${t('shell.navigation.label')}>
+          <div slot="logo" class="dc-logo"><a class="dc-home" data-action="home" href=${hrefOf(homeRoute(this.route, this.signedIn))} aria-label=${t('shell.home.label')} @click=${this.goHome}><img src="${import.meta.env.BASE_URL}${this.consoleSkin ? 'brand-mark-console.svg' : 'brand-mark.svg'}" alt=""><span class="dc-name">Decluttering</span></a>${this.orgName ? html`<span class="dc-org">${this.orgName}</span>` : nothing}</div>
           <calcite-button slot="content-end" class="dc-about-link" data-action="about" appearance="transparent" kind="neutral" icon-start="information"
-            href=${hrefOf('about')} label="About Decluttering" ?active=${this.route === 'about'}>${this.narrow ? nothing : 'About'}</calcite-button>
+            href=${hrefOf('about')} label=${t('shell.about.label')} ?active=${this.route === 'about'}>${this.narrow ? nothing : t('shell.about.button')}</calcite-button>
           <button type="button" role="switch" slot="content-end" class="dc-skin-toggle" data-action="skin-toggle" aria-checked=${this.consoleSkin ? 'true' : 'false'}
             aria-label=${SKIN_COPY.name} title=${this.consoleSkin ? SKIN_COPY.backLabel : SKIN_COPY.badge}
-            @click=${() => setSkin(this.consoleSkin ? 'standard' : 'console')}><span class="dc-skin-track" aria-hidden="true"><span class="dc-skin-knob"><svg viewBox="0 0 24 24" width="14" height="14" focusable="false">${this.consoleSkin ? DELTA_ICON : SUN_ICON}</svg></span></span></button>
-          ${this.renderUser()}
+            @click=${() => setSkin(this.consoleSkin ? 'standard' : 'console')}><span class="dc-skin-track" aria-hidden="true"><span class="dc-skin-knob"><svg viewBox="0 0 24 24" width="14" height="14" focusable="false">${this.consoleSkin ? DELTA_ICON : SUN_ICON}</svg></span></span></button>          ${this.renderUser()}
         </calcite-navigation>
         ${this.access && !this.inDemo ? html`<dc-access-dialog ?open=${this.accessOpen} .mode=${this.access.mode} .usageReadable=${this.access.usageReadable} .mayOptIn=${this.access.writable} .optedIn=${this.sendingOn} .email=${this.access.email} @dc-turn-on-sending=${this.askTurnOn} @dc-turn-off-sending=${this.askTurnOff} @dc-access-close=${() => { this.accessOpen = false; }}></dc-access-dialog>
-        <dc-turn-on-sending .open=${this.turnOnOpen} .busy=${this.turnOnBusy} .error=${this.turnOnError} @dc-turn-on-close=${() => { if (!this.turnOnBusy) this.turnOnOpen = false; }} @dc-turn-on-confirm=${this.confirmTurnOn}></dc-turn-on-sending>
+        <dc-turn-on-sending .open=${this.turnOnOpen} .busy=${this.turnOnBusy} .error=${this.turnOnErrorText} @dc-turn-on-close=${() => { if (!this.turnOnBusy) this.turnOnOpen = false; }} @dc-turn-on-confirm=${this.confirmTurnOn}></dc-turn-on-sending>
         <dc-turn-off-sending .open=${this.turnOffOpen} .busy=${this.turnOffBusy} .error=${this.turnOffError} @dc-turn-off-close=${() => { if (!this.turnOffBusy) this.turnOffOpen = false; }} @dc-turn-off-confirm=${this.confirmTurnOff}></dc-turn-off-sending>
-        <calcite-alert kind="success" icon="check-circle" auto-close auto-close-duration="medium" placement="bottom" label="Notice" .open=${this.offToast} @calciteAlertClose=${() => { this.offToast = false; }}>
+        <calcite-alert kind="success" icon="check-circle" auto-close auto-close-duration="medium" placement="bottom" label=${t('shell.notice.label')} .open=${this.offToast} @calciteAlertClose=${() => { this.offToast = false; }}>
           <div slot="message" data-toast="turn-off">${this.offToast ? TURN_OFF.done : nothing}</div>
         </calcite-alert>` : nothing}
         <main style="padding: 1.25rem 1.5rem; margin-inline: auto; max-width: ${this.route === 'app' ? '72rem' : this.route === 'emails' || this.route === 'demo-emails' ? '88rem' : '76rem'}">${this.renderSteps()}${body}</main>

@@ -38,6 +38,8 @@ export interface Service {
   numViews?: number;
   dependencies: Dependency[];
   description?: string; snippet?: string; tags?: string[];
+  /** GH-2: Esri's content status badge from the search row (`deprecated`, `org_authoritative`, ...). Absent: none, or a scan from before. */
+  contentStatus?: string;
 }
 
 export interface Data {
@@ -58,6 +60,10 @@ export interface Thresholds {
   minDaysSinceUse: number;
   minDaysSinceUpdate: number; maxUsedBy: number;
   minSizeMB?: number;
+  /** GH-2: leave out layers the org has marked deprecated. Off by default; not part of any starting point. */
+  excludeDeprecated?: boolean;
+  /** GH-2: show layers the org has marked authoritative. Off by default (they are left out); not part of any starting point. */
+  includeAuthoritative?: boolean;
 }
 
 export type TidyHint = 'description' | 'tags' | 'summary';

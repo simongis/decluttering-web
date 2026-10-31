@@ -1,4 +1,6 @@
 // DC-109 (FB-65): the step model behind the "Scan · Review · Emails" indicator. Pure: no DOM, no router.
+import { t, type MessageKey } from '../../i18n';
+
 export type StepId = 'scan' | 'review' | 'emails';
 /** current: where the admin is. link: a step they can go to. disabled: not available yet (see `hint`). */
 export type StepState = 'current' | 'link' | 'disabled';
@@ -18,24 +20,21 @@ export interface StepsInput {
   noEmails: boolean;
 }
 
-export const LABEL: Record<StepId, string> = { scan: 'Scan', review: 'Review', emails: 'Emails' };
-export const EMAILS_HINT = 'Tick an owner on Review to write emails.';
-const SCAN_HINT = 'The quick demo skips the scan.';
-const REVIEW_HINT = 'Review opens once the scan has found your layers.';
+const LABEL_KEY: Record<StepId, MessageKey> = { scan: 'steps.scan', review: 'steps.review', emails: 'steps.emails' };
 
 export function stepsFor(i: StepsInput): Step[] {
   const ids: StepId[] = i.noEmails && i.showing !== 'emails' ? ['scan', 'review'] : ['scan', 'review', 'emails'];
   return ids.map((id): Step => {
-    const label = LABEL[id];
+    const label = t(LABEL_KEY[id]);
     if (id === i.showing) return { id, label, state: 'current' };
-    if (id === 'scan') return i.hasScan ? { id, label, state: 'link' } : { id, label, state: 'disabled', hint: SCAN_HINT };
-    if (id === 'review') return i.hasData ? { id, label, state: 'link' } : { id, label, state: 'disabled', hint: REVIEW_HINT };
-    return i.hasData && i.ticked > 0 ? { id, label, state: 'link' } : { id, label, state: 'disabled', hint: EMAILS_HINT };
+    if (id === 'scan') return i.hasScan ? { id, label, state: 'link' } : { id, label, state: 'disabled', hint: t('steps.scanHint') };
+    if (id === 'review') return i.hasData ? { id, label, state: 'link' } : { id, label, state: 'disabled', hint: t('steps.reviewHint') };
+    return i.hasData && i.ticked > 0 ? { id, label, state: 'link' } : { id, label, state: 'disabled', hint: t('steps.emailsHint') };
   });
 }
 
 /** "Step 2 of 3: Review", for the phone layout and the accessible name. */
 export function stepLine(steps: readonly Step[]): string {
   const at = Math.max(0, steps.findIndex((s) => s.state === 'current'));
-  return `Step ${at + 1} of ${steps.length}: ${steps[at]?.label ?? ''}`;
+  return t('steps.line', { n: at + 1, total: steps.length, label: steps[at]?.label ?? '' });
 }

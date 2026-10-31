@@ -96,16 +96,16 @@ describe('FB-20: hosted-layer tips first', () => {
     }
   });
   it('tags the real list', () => {
-    const t = QUIPS.filter((q) => q.kind === 'tip');
+    const t = QUIPS().filter((q) => q.kind === 'tip');
     expect(t.every((q) => q.topic === 'hosted-layers' || q.topic === 'other')).toBe(true);
     expect(t.filter((q) => q.topic === 'hosted-layers')).toHaveLength(8);
   });
 });
 
 describe.skipIf(!proto)('app and prototype stay in sync', () => {
-  it('same tips and jokes, in the same order', () => { expect(QUIPS).toEqual(proto.QUIPS); });
+  it('same tips and jokes, in the same order', () => { expect(QUIPS()).toEqual(proto.QUIPS); });
   it('same timing constants', () => {
     expect([QUIP_SHOW_AFTER_MS, QUIP_EVERY_MS, QUIP_EVERY_LINK_MS]).toEqual([proto.QUIP_SHOW_AFTER_MS, proto.QUIP_EVERY_MS, proto.QUIP_EVERY_LINK_MS]);
   });
-  it('every link passes safeUrl', () => { for (const q of QUIPS) if (q.url) expect(safeUrl(q.url)).toBeTruthy(); });
+  it('every link passes safeUrl', () => { for (const q of QUIPS()) if (q.url) expect(safeUrl(q.url)).toBeTruthy(); });
 });

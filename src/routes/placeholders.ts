@@ -1,23 +1,24 @@
 import { html } from 'lit';
+import { t } from '../i18n';
 import type { AccessMode } from '../auth/access';
 
 interface ModeCopy { title: string; lead: string; gets: string[] }
 
 export const MODE_COPY: Record<AccessMode, ModeCopy> = {
   admin: {
-    title: 'Admin',
-    lead: 'You can review the whole organisation and nudge owners.',
-    gets: ['Scan your organisation for stale hosted feature services', 'Review them with plain-language reasons', 'Send each owner one friendly email'],
+    get title() { return t('emails.mode.admin'); },
+    get lead() { return t('emails.mode.admin.lead'); },
+    get gets() { return [t('emails.mode.admin.scan'), t('emails.mode.admin.review'), t('emails.mode.admin.send')]; },
   },
   'admin-cant-send': {
-    title: 'Admin, can’t send',
-    lead: 'You can review the whole organisation. Emailing owners needs two more privileges.',
-    gets: ['Scan your organisation for stale hosted feature services', 'Review them with plain-language reasons', 'The email step explains which privileges to ask for: create groups and assign to groups'],
+    get title() { return t('emails.mode.no.send'); },
+    get lead() { return t('emails.mode.no.send.lead'); },
+    get gets() { return [t('emails.mode.admin.scan'), t('emails.mode.admin.review'), t('emails.mode.no.send.privileges')]; },
   },
   'my-items': {
-    title: 'My items',
-    lead: 'You can review your own hosted feature services.',
-    gets: ['The same stale rules, applied to your own services', 'Why each one is flagged, and what tidying it would save', 'A note you can copy and share with your admin'],
+    get title() { return t('emails.mode.mine'); },
+    get lead() { return t('emails.mode.mine.lead'); },
+    get gets() { return [t('emails.mode.mine.rules'), t('emails.mode.mine.why'), t('emails.mode.mine.note')]; },
   },
 };
 
@@ -25,11 +26,11 @@ export function modePlaceholder(mode: AccessMode, who: string) {
   const c = MODE_COPY[mode];
   return html`
     <section data-page="app" data-mode=${mode}>
-      <h1>Signed in as ${who}</h1>
-      <p>Access: <strong data-mode-label>${c.title}</strong></p>
+      <h1>${t('emails.signed.in', { name: who })}</h1>
+      <p>${t('emails.access')} <strong data-mode-label>${c.title}</strong></p>
       <p>${c.lead}</p>
-      <p>What you’ll get:</p>
+      <p>${t('emails.get')}</p>
       <ul>${c.gets.map((g) => html`<li>${g}</li>`)}</ul>
-      <p><em>The scan itself is coming soon.</em></p>
+      <p><em>${t('emails.scan.coming')}</em></p>
     </section>`;
 }

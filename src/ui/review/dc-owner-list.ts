@@ -1,5 +1,7 @@
 import { LitElement, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { LocaleController } from '../../i18n/controller';
+import { getLocale, t, tn } from '../../i18n';
 import { guard } from 'lit/directives/guard.js';
 import { repeat } from 'lit/directives/repeat.js';
 import '@esri/calcite-components/dist/components/calcite-avatar';
@@ -28,6 +30,7 @@ const sixMonths = Math.round(COOLDOWN_DAYS / 30.4);
  */
 @customElement('dc-owner-list')
 export class DcOwnerList extends LitElement {
+  private readonly _locale = new LocaleController(this);
   @property({ attribute: false }) owners: OwnerGroup[] = [];
   @property({ attribute: false }) org!: Pick<Org, 'urlKey'> & { customBaseUrl?: string };
   @property({ attribute: false }) thresholds!: Thresholds;
@@ -126,7 +129,7 @@ export class DcOwnerList extends LitElement {
    */
   private cardOf(o: OwnerGroup) {
     return guard([o, this.expanded.has(o.owner.username), this.items, this.done, this.sort, this.selectable, this.member, this.canSeeUsage,
-      this.depsKnown, this.stopped, this.org, this.nudgeNotes.get(o.owner.username), this.thumbs?.get(o.owner.username)], () => this.card(o));
+      this.depsKnown, this.stopped, this.org, this.nudgeNotes.get(o.owner.username), this.thumbs?.get(o.owner.username), getLocale()], () => this.card(o));
   }
 
   private card(o: OwnerGroup) {
@@ -141,25 +144,25 @@ export class DcOwnerList extends LitElement {
     return html`<section class="owner ${on === 0 && this.selectable ? 'none' : ''}" aria-label=${ow.fullName} data-card=${u}>
       <div class="owner-top">
         ${href ? html`<a class="owner-pic" href=${href} target="_blank" rel="noopener noreferrer" data-owner-link=${u}
-          aria-label="Open ${first}'s content in ArcGIS Online (opens in a new tab)">${avatar}
+          aria-label=${t('review.owner.openContent', { name: first })}>${avatar}
           <span class="pic-badge" aria-hidden="true"><calcite-icon icon="launch" scale="s"></calcite-icon></span>
-          <span class="pic-tip" aria-hidden="true">Open ${first}'s content in ArcGIS Online</span></a>` : avatar}
+          <span class="pic-tip" aria-hidden="true">${t('review.owner.openContentTip', { name: first })}</span></a>` : avatar}
         <div class="owner-id"><strong>${ow.fullName}</strong><span>${roleLabel(ow.role)}</span></div>
         <div class="owner-chips">
           <calcite-chip scale="s" class="c-plain" appearance="outline-fill" kind="neutral" label=${plural(sumSvc(o.rows), 'service', 'services')}>${plural(sumSvc(o.rows), 'service', 'services')}</calcite-chip>
-          <calcite-chip scale="s" class="c-reclaim" appearance="outline-fill" kind="neutral" label="about ${credit(o.credits)} credits a month${o.unmeasured ? ' so far' : ''}"><i class="sw reclaim"></i>≈ ${credit(o.credits)} credits a month${o.unmeasured ? ' so far' : ''}</calcite-chip>
+          <calcite-chip scale="s" class="c-reclaim" appearance="outline-fill" kind="neutral" label=${t(o.unmeasured ? 'review.owner.creditsLabelSoFar' : 'review.owner.creditsLabel', { credits: credit(o.credits) })}><i class="sw reclaim"></i>≈ ${credit(o.credits)} ${t(o.unmeasured ? 'review.fig.creditsMonthSoFar' : 'review.fig.creditsMonth')}</calcite-chip>
         </div>
       </div>
-      ${o.startCount > 0 ? html`<div class="owner-flags"><span class="owner-start">${o.startCount} ${o.startCount === 1 ? 'quick win' : 'quick wins'}</span></div>` : nothing}
-      ${o.nudgedRecently ? html`<div class="owner-flags"><calcite-chip class="c-nudged" scale="s" icon="clock" appearance="solid" kind="neutral" label="Nudged ${agoText(o.nudgedDaysAgo)}${this.nudgeNotes.has(u) ? ` · ${this.nudgeNotes.get(u)}` : ''}">Nudged ${agoText(o.nudgedDaysAgo)}${this.nudgeNotes.has(u) ? ` · ${this.nudgeNotes.get(u)}` : ''}</calcite-chip></div>` : nothing}
+      ${o.startCount > 0 ? html`<div class="owner-flags"><span class="owner-start">${tn('review.owner.quickWin', o.startCount, { count: o.startCount })}</span></div>` : nothing}
+      ${o.nudgedRecently ? html`<div class="owner-flags"><calcite-chip class="c-nudged" scale="s" icon="clock" appearance="solid" kind="neutral" label=${t('review.owner.nudged', { ago: agoText(o.nudgedDaysAgo) })}${this.nudgeNotes.has(u) ? ` · ${this.nudgeNotes.get(u)}` : ''}>${t('review.owner.nudged', { ago: agoText(o.nudgedDaysAgo) })}${this.nudgeNotes.has(u) ? ` · ${this.nudgeNotes.get(u)}` : ''}</calcite-chip></div>` : nothing}
       <div>${repeat(rows, (r) => r.source.id, (r) => this.row(r, itemOn(this.items, o, r)))}</div>
       ${all.length > ROWS_COLLAPSED ? html`<div class="more-wrap"><calcite-button appearance="transparent" kind="neutral" scale="s" icon-end=${open ? 'chevron-up' : 'chevron-down'}
-        @click=${() => this.toggleMore(u)}>${open ? 'Show fewer' : `Show ${all.length - ROWS_COLLAPSED} more`}</calcite-button></div>` : nothing}
+        @click=${() => this.toggleMore(u)}>${open ? t('review.owner.showFewer') : t('review.owner.showMore', { count: all.length - ROWS_COLLAPSED })}</calcite-button></div>` : nothing}
       ${this.selectable ? html`<div class="owner-foot">
         <calcite-label layout="inline"><calcite-checkbox .checked=${on === o.rows.length} .indeterminate=${on > 0 && on < o.rows.length}
-          label="Include ${first} in the digest"
-          @calciteCheckboxChange=${(e: Event) => this.dispatchEvent(new CustomEvent('dc-owner-toggle', { detail: { username: u, checked: (e.target as HTMLInputElement).checked }, bubbles: true, composed: true }))}></calcite-checkbox>Include ${first} in the digest${on === o.rows.length ? nothing : html`<span class="count"> (${on} of ${o.rows.length} items)</span>`}</calcite-label>
-        ${o.nudgedRecently ? html`<p class="why-tick">Left unticked: ${first} had a digest in the last ${sixMonths} months. Tick to send anyway.</p>` : nothing}
+          label=${t('review.owner.includeDigest', { name: first })}
+          @calciteCheckboxChange=${(e: Event) => this.dispatchEvent(new CustomEvent('dc-owner-toggle', { detail: { username: u, checked: (e.target as HTMLInputElement).checked }, bubbles: true, composed: true }))}></calcite-checkbox>${t('review.owner.includeDigest', { name: first })}${on === o.rows.length ? nothing : html`<span class="count"> (${t('review.owner.itemCount', { included: on, total: o.rows.length })})</span>`}</calcite-label>
+        ${o.nudgedRecently ? html`<p class="why-tick">${t('review.owner.leftUnticked', { name: first, months: sixMonths })}</p>` : nothing}
       </div>` : nothing}
     </section>`;
   }
@@ -167,11 +170,11 @@ export class DcOwnerList extends LitElement {
   private memberList() {
     const rows = this.view(this.owners.flatMap((o) => o.rows));
     const doneCount = rows.filter((r) => this.done.has(r.source.id)).length;
-    return html`<section class="owner" aria-label="Your hosted feature layers">
+    return html`<section class="owner" aria-label=${t('review.owner.memberLabel')}>
       <div>${repeat(rows, (r) => r.source.id, (r) => this.row(r, false))}</div>
       <div class="owner-foot"><span class="mi-count">${doneCount === 0
-        ? 'Looking changes nothing and sends nothing. Mark as done is just for you, in this browser.'
-        : `${plural(doneCount, 'item', 'items')} marked as done, in this browser only.`}</span></div>
+        ? t('review.owner.memberIntro')
+        : tn('review.owner.done', doneCount, { count: doneCount })}</span></div>
     </section>`;
   }
 

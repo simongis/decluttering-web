@@ -4,6 +4,8 @@
 // Properties: notifier, nudgeLog, writable, org, signal (aborts detection), sending (disables removal during a send).
 // Fires `dc-app-data-removed` ({ what: 'group' | 'log' }) after a removal, so the page can drop what it cached.
 import { LitElement, html, nothing, type PropertyValues } from 'lit';
+import { LocaleController } from '../../i18n/controller';
+import { t } from '../../i18n';
 import { customElement, property, state } from 'lit/decorators.js';
 import '@esri/calcite-components/dist/components/calcite-button';
 import '@esri/calcite-components/dist/components/calcite-dialog';
@@ -17,6 +19,7 @@ type Which = 'group' | 'log';
 
 @customElement('dc-app-data')
 export class DcAppData extends LitElement {
+  private readonly _locale = new LocaleController(this);
   @property({ attribute: false }) notifier: GroupNotifier | null = null;
   @property({ attribute: false }) nudgeLog: NudgeLog | null = null;
   @property({ type: Boolean }) writable = false;
@@ -29,8 +32,8 @@ export class DcAppData extends LitElement {
   @state() private loading = false;
   @state() private dialog: Which | null = null;
   @state() private working = false;
-  @state() private failure: { message: string; href: string } | null = null;
-  @state() private done: string | null = null;
+  @state() private failure: { what: Which; href: string } | null = null;
+  @state() private done: Which | null = null;
   private run = 0;
 
   protected override createRenderRoot(): HTMLElement { return this; }
@@ -59,16 +62,16 @@ export class DcAppData extends LitElement {
     else outcome = { ok: false, message: what === 'group' ? COPY.groupFailed : COPY.logFailed, href: this.found?.[what]?.href ?? '' };
     this.working = false;
     this.dialog = null;
-    if (!outcome.ok) { this.failure = { message: outcome.message, href: outcome.href }; return; }
+    if (!outcome.ok) { this.failure = { what, href: outcome.href }; return; }
     this.failure = null;
     if (what === 'log') forgetNudgeLog(this.org.id);
     this.found = { ...(this.found ?? { group: null, log: null }), [what]: null };
-    this.done = what === 'group' ? COPY.groupDone : COPY.logDone;
+    this.done = what;
     this.dispatchEvent(new CustomEvent('dc-app-data-removed', { detail: { what }, bubbles: true, composed: true }));
   }
 
   private link(href: string) {
-    return html`<a class="appdata-link" href=${href} target="_blank" rel="noopener noreferrer">${COPY.open}<span class="about-sr"> (opens in a new tab)</span></a>`;
+    return html`<a class="appdata-link" href=${href} target="_blank" rel="noopener noreferrer">${COPY.open}<span class="about-sr">${t('about.newTab')}</span></a>`;
   }
 
   override render() {
@@ -79,7 +82,7 @@ export class DcAppData extends LitElement {
     return html`<section class="appdata" aria-labelledby="appdata-h" data-app-data>
       <h2 id="appdata-h">${COPY.heading}</h2>
       ${this.loading ? html`<p class="appdata-quiet" role="status" data-app-data-loading>${COPY.loading}</p>` : html`<p class="appdata-intro">${COPY.intro}</p>`}
-      ${this.done ? html`<p class="appdata-quiet" role="status" data-app-data-done>${this.done}</p>` : nothing}
+      ${this.done ? html`<p class="appdata-quiet" role="status" data-app-data-done>${this.done === 'group' ? COPY.groupDone : COPY.logDone}</p>` : nothing}
       ${rows ? html`<ul class="appdata-rows">
         ${f?.group ? html`<li class="appdata-row" data-app-data-row="group">
           <div><span class="appdata-name">${COPY.groupRow}</span><span class="appdata-note">${COPY.groupNote}</span></div>
@@ -96,7 +99,7 @@ export class DcAppData extends LitElement {
       </ul>` : nothing}
       ${this.sending && rows ? html`<p class="appdata-quiet" data-app-data-busy>${COPY.busy}</p>` : nothing}
       ${this.failure ? html`<calcite-notice class="appdata-fail" open kind="danger" icon="exclamation-mark-triangle" scale="s" data-app-data-failure>
-        <div slot="message">${this.failure.message}${this.failure.href ? html` <a class="appdata-link" href=${this.failure.href} target="_blank" rel="noopener noreferrer">${COPY.open}</a>` : nothing}</div>
+        <div slot="message">${this.failure.what === 'group' ? COPY.groupFailed : COPY.logFailed}${this.failure.href ? html` <a class="appdata-link" href=${this.failure.href} target="_blank" rel="noopener noreferrer">${COPY.open}</a>` : nothing}</div>
       </calcite-notice>` : nothing}
 
       <calcite-dialog modal heading=${COPY.groupConfirmHeading} width-scale="s" .open=${this.dialog === 'group'}

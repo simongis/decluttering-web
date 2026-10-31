@@ -10,17 +10,18 @@ import { createRequest } from '../scan/request';
 import type { PhaseId, RequestFn, ScanProgress, ScanStages } from '../scan/types';
 import { createSessionNudgeLog, getNudgeSends, mergeLogReads, seededNudgeLog, setNudgeLog, setNudgeSources, setNudgeSummary, type NudgeLog, type OthersRead } from '../log';
 import { sinceNudges } from '../domain/outcomes';
+import { t } from '../i18n';
 
 export const PHASE_ORDER: PhaseId[] = ['find', 'size', 'views', 'usage', 'owners', 'deps'];
 
 /** Phase-level microcopy (the live message from the scan adds the counts). */
 export const PHASE_COPY: Record<PhaseId, string> = {
-  find: 'Finding your hosted feature services',
-  size: 'Measuring how much storage each one uses',
-  views: 'Working out which ones are views of others',
-  usage: 'Checking when each was last used',
-  owners: 'Meeting the owners',
-  deps: 'Seeing which maps and apps use them',
+  get find() { return t('scan.phase.find'); },
+  get size() { return t('scan.phase.size'); },
+  get views() { return t('scan.phase.views'); },
+  get usage() { return t('scan.phase.usage'); },
+  get owners() { return t('scan.phase.owners'); },
+  get deps() { return t('scan.phase.deps'); },
 };
 
 export interface ScanOutcome {

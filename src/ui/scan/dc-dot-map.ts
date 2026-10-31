@@ -1,5 +1,7 @@
 import { LitElement, html, nothing, render, type PropertyValues } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
+import { LocaleController } from '../../i18n/controller';
+import { t as translate, tn } from '../../i18n';
 import { live } from 'lit/directives/live.js';
 import '@esri/calcite-components/dist/components/calcite-segmented-control';
 import '@esri/calcite-components/dist/components/calcite-segmented-control-item';
@@ -60,6 +62,7 @@ interface Ghost { x: number; y: number; rad: number; colour: string; start: numb
 
 @customElement('dc-dot-map')
 export class DcDotMap extends LitElement {
+  private readonly _locale = new LocaleController(this);
   @property({ attribute: false }) model: DotModel = { dots: [], revealed: false, exact: false, staleMin: 0.3, maxSizeMB: 1, stats: { found: 0, staleServices: 0, credits: 0, sizeMB: 0 } };
   /** Services are still being found (kept for the scan screen; entry motion now covers the newest dots). */
   @property({ type: Boolean }) finding = false;
@@ -165,6 +168,11 @@ export class DcDotMap extends LitElement {
   protected override updated(changed: PropertyValues<this>): void {
     if (changed.has('model') || (changed as Map<PropertyKey, unknown>).has('showSmall') || changed.has('thresholds') || changed.has('expected') || changed.has('heightScale')) { this.rebuild(); this.kick(); }
     else if (changed.has('zoneLabel')) this.kick();
+    else this.kick();
+    if (this.tip && !this.tip.hidden) {
+      const idx = this.hover ?? this.focusIdx;
+      if (idx >= 0) this.showTip(idx, false, this.touch ? 'tap' : this.focusIdx >= 0 ? 'key' : 'hover');
+    }
   }
 
   // ---------- layout ----------
@@ -337,8 +345,8 @@ export class DcDotMap extends LitElement {
     };
     const vline = (n: number) => { const x = Math.round(this.plotX(n)) + 0.5; gridLine(x, p.y0, x, bottom); };
     const timeAxis = () => {
-      for (const [d, l] of [[90, '3 months'], [180, '6 months'], [365, '1 year'], [730, '2 years']] as const) { vline(xUpdate(d, 0)); xt(xUpdate(d, 0), l); }
-      vline(0.89); xt(0.95, '3 years +');
+      for (const [d, l] of [[90, translate('scan.map.months-3')], [180, translate('scan.map.months-6')], [365, translate('scan.map.years-1')], [730, translate('scan.map.years-2')]] as const) { vline(xUpdate(d, 0)); xt(xUpdate(d, 0), l); }
+      vline(0.89); xt(0.95, translate('scan.map.years-3-plus'));
     };
     const frame = (xTitle: string, yTitle: string) => {
       if (P.starChart) {
@@ -360,7 +368,7 @@ export class DcDotMap extends LitElement {
     if (early) {
       // DC-082: before usage, the time axis is already true; up waits for usage.
       ctx.globalAlpha = 1; timeAxis();
-      frame('Last updated', 'Last used: waiting for usage');
+      frame(translate('scan.map.last-updated'), translate('scan.map.waiting-usage'));
       ctx.restore(); return;
     }
     let xTitle: string, yTitle: string;
@@ -371,16 +379,16 @@ export class DcDotMap extends LitElement {
       const sy = Math.round(this.plotY(0.893)) + 0.5; // separator under the "No use" band (no use recorded)
       ctx.beginPath(); ctx.moveTo(p.x0, sy); ctx.lineTo(right, sy); ctx.strokeStyle = P.sep; ctx.setLineDash([2, 3]); ctx.stroke(); ctx.setLineDash([]);
       ctx.globalAlpha = this.preTimed ? 1 : k; timeAxis(); ctx.globalAlpha = k; // the time axis was already there
-      yt((Y_BAND[0] + Y_BAND[1]) / 2, 'No use', false);
-      for (const [d, l] of [[0, 'today'], [90, '3 months'], [180, '6 months'], [365, '1 year'], [730, '2 years']] as const) yt(yLastUsed(d), l);
-      xTitle = 'Last updated'; yTitle = 'Last used';
+      yt((Y_BAND[0] + Y_BAND[1]) / 2, translate('scan.map.no-use'), false);
+      for (const [d, l] of [[0, translate('scan.map.today')], [90, translate('scan.map.months-3')], [180, translate('scan.map.months-6')], [365, translate('scan.map.years-1')], [730, translate('scan.map.years-2')]] as const) yt(yLastUsed(d), l);
+      xTitle = translate('scan.map.last-updated'); yTitle = translate('scan.map.last-used');
       // FB-63: the border goes on after the grid lines. A grid line (1 year, 6 months...) can sit on the zone's edge, and painted first
       // the border was wiped out by it (Gentle and Suggested put the left edge exactly on "1 year").
       const zb = zoneBox(p, INSET, t);
       ctx.save(); ctx.strokeStyle = P.zoneLine; ctx.setLineDash(P.starChart ? [6, 3] : [4, 3]); ctx.strokeRect(zb.left, zb.top, zb.right - zb.left, zb.bottom - zb.top); ctx.restore();
       ctx.globalAlpha = k * 0.95;
       // FB-41: no corner labels; the axis titles and the stale zone say it.
-      this.halo(cap(`Stale zone (${this.zoneLabel})`), zx + 8, zyTop + 14, 'left', P.zoneLine, P.starChart ? `600 12.5px ${P.font}` : `600 11.5px ${P.font}`);
+      this.halo(cap(translate('scan.map.stale-zone', { label: this.zoneLabel })), zx + 8, zyTop + 14, 'left', P.zoneLine, P.starChart ? `600 12.5px ${P.font}` : `600 11.5px ${P.font}`);
       ctx.globalAlpha = k;
     } else if (this.lens === 'big') {
       const max = this.shown.maxSizeMB;
@@ -389,12 +397,12 @@ export class DcDotMap extends LitElement {
       ctx.fillStyle = P.text; ctx.textAlign = 'left'; ctx.fillText(cap(band.label), p.x0 + 4, bottom + 16);
       if (band.note) this.halo(cap(band.note), p.x0 + 6, p.y0 + 12, 'left', P.text, P.starChart ? `12px ${P.font}` : `italic 11px ${P.font}`);
       for (const [mb, l] of [[1, '1 MB'], [10, '10 MB'], [100, '100 MB'], [1024, '1 GB']] as const) if (mb < max * 1.2) { vline(xSize(mb, 0, max)); xt(xSize(mb, 0, max), l); }
-      yt(0, 'barely'); yt(0.5, 'fairly'); yt(1, 'very');
-      xTitle = 'Storage'; yTitle = 'How stale';
+      yt(0, translate('scan.map.barely')); yt(0.5, translate('scan.map.fairly')); yt(1, translate('scan.map.very'));
+      xTitle = translate('scan.map.storage'); yTitle = translate('scan.lens.stale');
     } else {
-      ['none', '1', '2', '3 or more'].forEach((l, c) => xt((c + 0.5) / 4, l));
-      yt(0, 'barely'); yt(0.5, 'fairly'); yt(1, 'very');
-      xTitle = 'Maps and apps using it'; yTitle = 'How stale';
+      [translate('scan.map.none'), '1', '2', translate('scan.map.more')].forEach((l, c) => xt((c + 0.5) / 4, l));
+      yt(0, translate('scan.map.barely')); yt(0.5, translate('scan.map.fairly')); yt(1, translate('scan.map.very'));
+      xTitle = translate('scan.map.maps-apps-using'); yTitle = translate('scan.lens.stale');
     }
     frame(xTitle, yTitle);
     ctx.restore();
@@ -511,13 +519,13 @@ export class DcDotMap extends LitElement {
   private showTip(i: number, announce: boolean, how: 'hover' | 'key' | 'tap' = 'hover'): void {
     const d = this.sprites[i]; if (!d) return;
     clearTimeout(this.hideTimer);
-    const credits = d.credits >= 0.05 ? `about ${d.credits < 10 ? d.credits.toFixed(1) : fmtInt(d.credits)} credits a month` : 'under 0.1 credits a month';
+    const credits = d.credits >= 0.05 ? translate('scan.map.tip.monthly-credits', { credits: d.credits < 10 ? d.credits.toFixed(1) : fmtInt(d.credits) }) : translate('scan.map.tip.under-credits');
     render(html`<strong>${d.title}</strong><span class="dm-t-owner">${d.owner}</span>
-      <span class="dm-t-row">${d.sized ? html`${formatMB(d.sizeMB)} · ${credits}` : 'Size not measured yet'}</span>
+      <span class="dm-t-row">${d.sized ? html`${formatMB(d.sizeMB)} · ${credits}` : translate('scan.map.tip.size-unmeasured')}</span>
       <span class="dm-t-why">${dotWhy(d)}</span>
       ${how === 'tap'
-        ? html`<a href=${this.urlOf(d)} target="_blank" rel="noopener">Open in ArcGIS Online ↗<span class="dc-sr"> (opens in a new tab)</span></a>`
-        : html`<span class="dm-t-hint">${how === 'key' ? 'Press Enter' : 'Click'} to open in ArcGIS Online</span>`}`, this.tip);
+        ? html`<a href=${this.urlOf(d)} target="_blank" rel="noopener">${translate('scan.map.tip.open')}<span class="dc-sr">${translate('scan.new-tab')}</span></a>`
+        : html`<span class="dm-t-hint">${translate(how === 'key' ? 'scan.map.tip.press-enter' : 'scan.map.tip.click')}${translate('scan.map.tip.to-open')}</span>`}`, this.tip);
     this.tip.classList.toggle('is-pinned', how === 'tap');
     this.tip.hidden = false;
     const tw = this.tip.offsetWidth, th = this.tip.offsetHeight;
@@ -527,7 +535,7 @@ export class DcDotMap extends LitElement {
     this.tip.style.transform = `translate(${x}px, ${y}px)`;
     if (announce) this.srLive.textContent = `${d.title}, ${d.owner}. ${dotWhy(d)}`;
   }
-  private creditsText(c: number): string { return c >= 0.05 ? `about ${c < 10 ? c.toFixed(1) : fmtInt(c)} credits` : 'under 0.1 credits'; }
+  private creditsText(c: number): string { return c >= 0.05 ? translate('scan.map.credits', { credits: c < 10 ? c.toFixed(1) : fmtInt(c) }) : translate('scan.map.under-credits'); }
   private hideTip(): void { clearTimeout(this.tipTimer); clearTimeout(this.hideTimer); if (this.tip) this.tip.hidden = true; this.pinned = false; }
   private scheduleHide(): void {
     clearTimeout(this.hideTimer);
@@ -584,38 +592,40 @@ export class DcDotMap extends LitElement {
     const asDots = dense ? m.dots.filter((d) => d.kind === 'stale' || d.candidate).length : 0;
     // DC-079 and FB-43: what the floor leaves out, in one line ("4,018 layers under 3 MB (...) and 13 with minimal storage (under 0.1 MB)").
     const hidN = hid.count + hid.noStorage;
-    const small = hid.count > 0 ? `${fmtInt(hid.count)} ${hid.count === 1 ? 'layer' : 'layers'} under ${SMALL_LAYER_MB} MB (${this.creditsText(hid.credits)} a month)` : '';
-    const empty = hid.noStorage > 0 ? `${fmtInt(hid.noStorage)}${small ? '' : hid.noStorage === 1 ? ' layer' : ' layers'} with minimal storage (under ${NO_STORAGE_MB} MB)` : '';
-    const hiddenLine = [small, empty].filter(Boolean).join(' and ');
-    const hiddenNote = [hid.count > 0 ? `Layers under ${SMALL_LAYER_MB} MB` : '', hid.noStorage > 0 ? (hid.count > 0 ? 'layers with minimal storage' : 'Layers with minimal storage') : ''].filter(Boolean).join(' and ');
+    const small = hid.count > 0 ? tn('scan.map.small-under', hid.count, { count: fmtInt(hid.count), layer: translate(hid.count === 1 ? 'scan.map.small-layer-one' : 'scan.map.small-layer-other'), mb: SMALL_LAYER_MB, credits: this.creditsText(hid.credits) }) : '';
+    const empty = hid.noStorage > 0 ? tn('scan.map.small-minimal', hid.noStorage, { count: fmtInt(hid.noStorage), prefix: small ? '' : translate(hid.noStorage === 1 ? 'scan.map.small-prefix-one' : 'scan.map.small-prefix-many'), mb: NO_STORAGE_MB }) : '';
+    const hiddenLine = small && empty ? translate('scan.map.hidden.join', { small, minimal: empty }) : translate('scan.map.hidden.join-only', { small, minimal: empty });
+    const smallHiddenLabel = hid.count > 0 ? translate('scan.map.hidden.small', { mb: SMALL_LAYER_MB }) : '';
+    const minimalHiddenLabel = hid.noStorage > 0 ? translate(hid.count > 0 ? 'scan.map.hidden.minimal-lower' : 'scan.map.hidden.minimal') : '';
+    const hiddenNote = smallHiddenLabel && minimalHiddenLabel ? translate('scan.map.hidden.join', { small: smallHiddenLabel, minimal: minimalHiddenLabel }) : translate('scan.map.hidden.join-only', { small: smallHiddenLabel, minimal: minimalHiddenLabel });
     return html`
       <div class="dm-wrap" data-lens=${this.lens}>
         <div class="dm-lens">
-          ${this.lenses.length < 2 ? nothing : html`<calcite-segmented-control scale="s" width="auto" label="Arrange the dots by" ?disabled=${!ready} data-scan="lenses"
+          ${this.lenses.length < 2 ? nothing : html`<calcite-segmented-control scale="s" width="auto" label=${translate('scan.map.axis-arrange')} ?disabled=${!ready} data-scan="lenses"
             @calciteSegmentedControlChange=${(e: Event) => this.setLens((e.target as HTMLElement & { value: string }).value as LensId)}>
             ${LENSES.filter((l) => this.lenses.includes(l.id)).map((l) => html`<calcite-segmented-control-item value=${l.id} .checked=${live(l.id === this.picked)}>${l.label}</calcite-segmented-control-item>`)}
           </calcite-segmented-control>`}
           <span class="dm-lens-note" data-scan="lens-note">${note}</span>
         </div>
         <div class="dm-stage">
-          <canvas tabindex="0" role="application" aria-roledescription="dot map" aria-describedby="dc-dm-help dc-dm-tip" data-scan="dots"
-            aria-label=${`One dot for each hosted feature service, coloured by how stale it is.${dense ? ' Services that are not stale are shown as grey shading.' : ''}${hiddenNote && !this.showSmall ? ` ${hiddenNote} are not shown.` : ''} Use the arrow keys to move between dots, Enter to open one in ArcGIS Online.`}
+          <canvas tabindex="0" role="application" aria-roledescription=${translate('scan.map.canvas-title')} aria-describedby="dc-dm-help dc-dm-tip" data-scan="dots"
+            aria-label=${translate('scan.map.aria', { dense: dense ? translate('scan.map.aria.density') : '', hidden: hiddenNote && !this.showSmall ? translate('scan.map.aria.hidden', { label: hiddenNote }) : '' })}
             @pointermove=${this.onMove} @pointerleave=${this.onLeave} @pointerdown=${this.onDown} @click=${this.onClick} @keydown=${this.onKey} @blur=${this.onBlur}></canvas>
           <div class="dm-tip" id="dc-dm-tip" role="tooltip" hidden
             @pointerenter=${() => clearTimeout(this.hideTimer)} @pointerleave=${() => this.scheduleHide()}></div>
           <div class="dm-sr" aria-live="polite"></div>
-          <p class="dm-sr" id="dc-dm-help" data-scan="dots-help">${ready ? `${fmtInt(m.dots.length)} ${m.dots.length === 1 ? 'dot' : 'dots'} shown, ${fmtInt(m.dots.filter((d) => d.kind === 'stale').length)} in the stale zone. ` : 'Still reading your layers. '}Arrow keys move between dots from the stalest. Home and End jump to the first and last. Enter opens the layer in ArcGIS Online. Escape clears the selection.</p>
+          <p class="dm-sr" id="dc-dm-help" data-scan="dots-help">${ready ? tn('scan.map.help.ready', m.dots.length, { count: fmtInt(m.dots.length), stale: fmtInt(m.dots.filter((d) => d.kind === 'stale').length) }) : translate('scan.map.help.waiting')}${translate('scan.map.help.keys')}</p>
         </div>
         <div class="dm-legend">
-          <span class="dm-lg"><span class="dm-ramp" style="background: linear-gradient(90deg, ${this.pal.ramp.from}, ${this.pal.ramp.mid}, ${this.pal.ramp.to})"></span><span class="dm-ramp-labels"><span>Barely stale</span><span>Very stale</span></span></span>
+          <span class="dm-lg"><span class="dm-ramp" style="background: linear-gradient(90deg, ${this.pal.ramp.from}, ${this.pal.ramp.mid}, ${this.pal.ramp.to})"></span><span class="dm-ramp-labels"><span>${translate('scan.map.legend.barely')}</span><span>${translate('scan.map.legend.very')}</span></span></span>
           ${dense
-            ? html`<span class="dm-lg" data-scan="density"><i class="dm-shade"></i>${fmtInt(asDots)} likely stale as dots; ${fmtInt(m.dots.length - asDots)} others as shading</span>`
-            : html`<span class="dm-lg"><i class="dm-grey"></i>Not stale</span>`}
-          <span class="dm-lg"><i class="dm-sz s"></i><i class="dm-sz l"></i>Bigger dot, more storage</span>
-          <span class="dm-lg"><i class="dm-sz m dm-ringed"></i>Ring: used by maps or apps. Grey in the zone: too small, or in too many maps or apps</span>
-          ${hiddenLine ? html`<span class="dm-lg dm-small" data-scan="small-floor">${hiddenLine} ${hidN === 1 ? 'is' : 'are'} ${this.showSmall ? 'shown' : 'hidden'}.
-            <button type="button" class="dm-link" data-scan="small-toggle" @click=${() => this.setShowSmall(!this.showSmall)}>${this.showSmall ? 'Hide them' : 'Show them'}</button></span>` : nothing}
-          ${m.exact ? nothing : html`<span class="dm-lg"><i class="dm-pending"></i>Size not read yet</span>`}
+            ? html`<span class="dm-lg" data-scan="density"><i class="dm-shade"></i>${translate('scan.map.density', { stale: fmtInt(asDots), others: fmtInt(m.dots.length - asDots) })}</span>`
+            : html`<span class="dm-lg"><i class="dm-grey"></i>${translate('scan.map.legend.not-stale')}</span>`}
+          <span class="dm-lg"><i class="dm-sz s"></i><i class="dm-sz l"></i>${translate('scan.map.legend.storage-size')}</span>
+          <span class="dm-lg"><i class="dm-sz m dm-ringed"></i>${translate('scan.map.legend.used')}</span>
+          ${hiddenLine ? html`<span class="dm-lg dm-small" data-scan="small-floor">${tn(this.showSmall ? 'scan.map.small.shown' : 'scan.map.small.hidden', hidN, { line: hiddenLine })}
+            <button type="button" class="dm-link" data-scan="small-toggle" @click=${() => this.setShowSmall(!this.showSmall)}>${translate(this.showSmall ? 'scan.map.hide-them' : 'scan.map.show-them')}</button></span>` : nothing}
+          ${m.exact ? nothing : html`<span class="dm-lg"><i class="dm-pending"></i>${translate('scan.map.legend.pending')}</span>`}
         </div>
       </div>`;
   }

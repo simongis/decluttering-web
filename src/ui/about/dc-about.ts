@@ -2,6 +2,8 @@
 // screen-reader friendly, collapsed by default). DC-110 adds two small Calcite-icon diagrams, the GitHub line and the
 // self-hosted contact link. Props: none. Makes no network calls, so it works signed out, signed in and in demo.
 import { LitElement, html, nothing } from 'lit';
+import { LocaleController } from '../../i18n/controller';
+import { t } from '../../i18n';
 import { customElement, property } from 'lit/decorators.js';
 import { hrefOf, type Route } from '../../routes/router';
 import '@esri/calcite-components/dist/components/calcite-icon';
@@ -18,6 +20,7 @@ const GITHUB_PATH = 'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.
 
 @customElement('dc-about')
 export class DcAbout extends LitElement {
+  private readonly _locale = new LocaleController(this);
   /** FB-70: the route About was opened from; app-root sets it. Drives the Back link. */
   @property({ attribute: false }) previous: Route = 'landing';
   /** ADR 0012: what the "App data in your org" section needs. With no notifier or log, or a read-only org, it renders nothing. */
@@ -56,12 +59,12 @@ export class DcAbout extends LitElement {
 
   private disclaimer() {
     const r = repoLine(import.meta.env.VITE_REPO_URL as string | undefined);
-    return html`<p class="about-disclaimer" data-about="disclaimer">${OPEN_DISCLAIMER.before}<a href=${r.href} target="_blank" rel="noopener noreferrer">${OPEN_DISCLAIMER.linkText}<span class="about-sr"> (opens in a new tab)</span></a>${OPEN_DISCLAIMER.after}</p>`;
+    return html`<p class="about-disclaimer" data-about="disclaimer">${OPEN_DISCLAIMER.before}<a href=${r.href} target="_blank" rel="noopener noreferrer">${OPEN_DISCLAIMER.linkText}<span class="about-sr">${t('about.newTab')}</span></a>${OPEN_DISCLAIMER.after}</p>`;
   }
 
   private issues() {
     const i = issuesLine(import.meta.env.VITE_REPO_URL as string | undefined);
-    return html`<p>${i.before}<a href=${i.link.href} target="_blank" rel="noopener noreferrer">${i.link.text}<span class="about-sr"> (opens in a new tab)</span></a>${i.after}</p>`;
+    return html`<p>${i.before}<a href=${i.link.href} target="_blank" rel="noopener noreferrer">${i.link.text}<span class="about-sr">${t('about.newTab')}</span></a>${i.after}</p>`;
   }
 
   private appData() {
@@ -71,7 +74,7 @@ export class DcAbout extends LitElement {
   override render() {
     return html`<article class="about">
       <a class="about-back" href=${hrefOf(this.previous)}><calcite-icon icon="arrow-left" scale="s" aria-hidden="true"></calcite-icon>${backLabel(this.previous)}</a>
-      <h1>About Decluttering</h1>
+      <h1>${t('about.pageTitle')}</h1>
       <p class="about-intro">${ABOUT_INTRO}</p>
       ${ABOUT_SECTIONS.map((s) => html`<section class="about-sec" aria-labelledby=${`about-h-${s.id}`}>
         <h2 id=${`about-h-${s.id}`}>${s.title}</h2>
@@ -79,11 +82,11 @@ export class DcAbout extends LitElement {
         ${s.flow ? this.flow(s.flow) : nothing}
         ${s.id === 'open' ? this.repo() : nothing}
         ${s.detail.length ? html`<details class="about-more" data-section=${s.id}>
-          <summary>More detail</summary>
+          <summary>${t('about.moreDetail')}</summary>
           <div class="about-detail">${s.detail.map((b) => this.block(b))}
-            ${s.id === 'approved' ? html`<p><a class="about-esri" href=${APPROVED_APPS_URL} target="_blank" rel="noopener noreferrer">${APPROVED_APPS_LINK_TEXT}<span class="about-sr"> (opens in a new tab)</span></a></p>` : nothing}
+            ${s.id === 'approved' ? html`<p><a class="about-esri" href=${APPROVED_APPS_URL} target="_blank" rel="noopener noreferrer">${APPROVED_APPS_LINK_TEXT}<span class="about-sr">${t('about.newTab')}</span></a></p>` : nothing}
             ${s.id === 'open' ? this.issues() : nothing}
-            ${s.id === 'open' ? html`<p><calcite-button class="about-contact" href=${CONTACT_URL} target="_blank" rel="noopener noreferrer" appearance="outline" scale="s" icon-start="envelope">${CONTACT_LINK_TEXT}<span class="about-sr"> (opens in a new tab)</span></calcite-button></p>` : nothing}
+            ${s.id === 'open' ? html`<p><calcite-button class="about-contact" href=${CONTACT_URL} target="_blank" rel="noopener noreferrer" appearance="outline" scale="s" icon-start="envelope">${CONTACT_LINK_TEXT}<span class="about-sr">${t('about.newTab')}</span></calcite-button></p>` : nothing}
           </div>
         </details>` : nothing}
         ${s.id === 'open' ? this.disclaimer() : nothing}

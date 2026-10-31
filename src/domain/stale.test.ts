@@ -38,6 +38,17 @@ test('presets match the contract and matchPreset round-trips', () => {
   assert.deepEqual(Object.keys(PRESET_NAMES).sort(), ['balanced', 'custom', 'gentle', 'strict', 'suggested']);
 });
 
+test('GH-2: deprecated layers are in unless excluded; authoritative ones are out unless included; neither changes the starting point', () => {
+  const dep = svc({ contentStatus: 'deprecated' }), plain = svc();
+  const auth = svc({ contentStatus: 'org_authoritative' }), pub = svc({ contentStatus: 'public_authoritative' });
+  const data = mk([dep, plain, auth, pub]);
+  const ids = (t: Thresholds) => evaluate(data, t).families.map((r) => r.source.id).sort();
+  assert.deepEqual(ids(T), [dep.id, plain.id].sort());
+  assert.deepEqual(ids({ ...T, excludeDeprecated: true }), [plain.id]);
+  assert.deepEqual(ids({ ...T, includeAuthoritative: true }), [dep.id, plain.id, auth.id, pub.id].sort());
+  assert.equal(matchPreset({ ...PRESETS.balanced, excludeDeprecated: true, includeAuthoritative: true }), 'balanced');
+});
+
 test('credits maths: 2.4 credits per 10 MB per month', () => {
   assert.equal(creditsPerMonth(10), 2.4);
   assert.equal(creditsPerMonth(0), 0);

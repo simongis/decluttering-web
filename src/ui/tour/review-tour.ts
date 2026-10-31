@@ -4,6 +4,7 @@ import 'driver.js/dist/driver.css';
 import '../../styles/tour.css';
 import { stepsFor, type TourStep } from './steps';
 import { markSeen, writeMark } from './rule';
+import { t } from '../../i18n';
 
 const visible = (el: Element): boolean => (el as HTMLElement).getClientRects().length > 0;
 const find = (s: TourStep): HTMLElement | null => {
@@ -21,7 +22,7 @@ export function startReviewTour(opts: { solo: boolean; onEnd?: () => void }): bo
   const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const d: Driver = driver({
     animate: !calm, smoothScroll: false, allowClose: true, allowKeyboardControl: true,
-    showProgress: true, progressText: '{{current}} of {{total}}', nextBtnText: 'Next', prevBtnText: 'Back', doneBtnText: 'Done', closeBtnLabel: 'Skip the tour',
+    showProgress: true, progressText: t('tour.progress'), nextBtnText: t('tour.next'), prevBtnText: t('tour.back'), doneBtnText: t('tour.done'), closeBtnLabel: t('tour.skip'),
     stagePadding: 6, stageRadius: 8, overlayOpacity: 0.55, popoverClass: 'dc-tour', disableActiveInteraction: true,
     steps: steps.map((s) => ({ element: () => find(s) ?? document.body, popover: { title: s.title, description: s.text, side: s.side, align: 'start' as const } })),
     onPopoverRender: (pop) => {
@@ -32,8 +33,8 @@ export function startReviewTour(opts: { solo: boolean; onEnd?: () => void }): bo
         b.type = 'button'; b.textContent = label; b.addEventListener('click', onClick);
         row.append(b);
       };
-      mk('Skip tour', () => { markSeen(); d.destroy(); }); // destroy() skips onDestroyStarted, so the choice is written here
-      mk('Don’t show again', () => { writeMark('never'); d.destroy(); });
+      mk(t('tour.skipButton'), () => { markSeen(); d.destroy(); }); // destroy() skips onDestroyStarted, so the choice is written here
+      mk(t('tour.dontShowAgain'), () => { writeMark('never'); d.destroy(); });
       pop.wrapper.append(row);
     },
     // Every way out (Done, Skip, the close cross, Escape, a click outside) ends up here.

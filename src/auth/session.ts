@@ -27,6 +27,9 @@ export interface AccessInfo {
   thumbnail?: string;
   /** DC-121: the profile email from `portals/self`. Absent = the portal didn't say (unknown, nothing is blocked); '' = none on file. */
   email?: string;
+  /** ADR 0015: the user's and the org's ArcGIS Online `culture` (portals/self), e.g. "es-MX", for the app's language. */
+  culture?: string;
+  orgCulture?: string;
 }
 
 export type ReturnResult =
@@ -119,7 +122,8 @@ export async function loadAccess(manager: ArcGISIdentityManager): Promise<Access
   // Both calls go through the same read-only guard as the scan (src/scan/request.ts).
   const call = createRequest(manager, { portal: PORTAL_URL });
   const self = await call('portals/self', {}, { method: 'GET' }) as {
-    id?: string; name?: string; urlKey?: string; customBaseUrl?: string; user?: { username?: string; fullName?: string; role?: string; privileges?: string[]; thumbnail?: string | null; email?: string | null };
+    id?: string; name?: string; urlKey?: string; customBaseUrl?: string; culture?: string | null;
+    user?: { username?: string; fullName?: string; role?: string; privileges?: string[]; thumbnail?: string | null; email?: string | null; culture?: string | null };
   };
   let usageReadable = false;
   try {
@@ -141,6 +145,8 @@ export async function loadAccess(manager: ArcGISIdentityManager): Promise<Access
     ...(self.customBaseUrl ? { customBaseUrl: self.customBaseUrl } : {}),
     ...(u.thumbnail ? { thumbnail: u.thumbnail } : {}),
     ...('email' in u ? { email: (u.email ?? '').trim() } : {}),
+    ...(u.culture ? { culture: u.culture } : {}),
+    ...(self.culture ? { orgCulture: self.culture } : {}),
   };
 }
 

@@ -3,12 +3,14 @@
 // that is. Correlation only: it never says a change happened because of a nudge. Props in: since, org, owners.
 import { LitElement, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
+import { LocaleController } from '../../i18n/controller';
+import { t } from '../../i18n';
 import '@esri/calcite-components/dist/components/calcite-block';
 import '@esri/calcite-components/dist/components/calcite-icon';
 import '@esri/calcite-components/dist/components/calcite-link';
 import type { Org, Owner } from '../../domain/types';
 import { fmtDate, itemUrl } from '../../domain/format';
-import { goneWords, OUTCOME_LABEL, outcomeParts, sinceLine, USED_AGAIN_TIP, type ItemOutcome, type OwnerOutcome, type SinceNudges } from '../../domain/outcomes';
+import { goneWords, OUTCOME_LABEL, outcomeParts, sinceLine, type ItemOutcome, type OwnerOutcome, type SinceNudges } from '../../domain/outcomes';
 
 const ICON: Record<ItemOutcome['outcome'], string> = {
   gone: 'check-circle', handedOver: 'user', updated: 'pencil', used: 'clock', noChange: 'circle', notChecked: 'question',
@@ -16,6 +18,7 @@ const ICON: Record<ItemOutcome['outcome'], string> = {
 
 @customElement('dc-since-nudges')
 export class DcSinceNudges extends LitElement {
+  private readonly _locale = new LocaleController(this);
   @property({ attribute: false }) since: SinceNudges | null = null;
   @property({ attribute: false }) org!: Pick<Org, 'urlKey'>;
   @property({ attribute: false }) owners: readonly Owner[] = [];
@@ -28,11 +31,11 @@ export class DcSinceNudges extends LitElement {
     const s = x.service;
     const what = s
       ? html`<calcite-link href=${itemUrl(this.org, s)} target="_blank" rel="noopener" icon-end="launch">${s.title}</calcite-link>`
-      : html`<span class="sn-gone-id" title=${x.id}>A layer no longer in your org<span class="dc-sr"> (layer id ${x.id})</span></span>`;
-    const label = x.outcome === 'handedOver' && s ? `Handed over to ${this.name(s.owner)}` : OUTCOME_LABEL[x.outcome];
+      : html`<span class="sn-gone-id" title=${x.id}>${t('review.since.gone')}<span class="dc-sr"> ${t('review.since.layerId', { id: x.id })}</span></span>`;
+    const label = x.outcome === 'handedOver' && s ? t('review.since.handedTo', { name: this.name(s.owner) }) : OUTCOME_LABEL[x.outcome];
     return html`<li data-outcome=${x.outcome}>
       <calcite-icon icon=${ICON[x.outcome]} scale="s" aria-hidden="true"></calcite-icon>${what}<span class="sn-out">${label}</span>
-      ${x.outcome === 'used' ? html`<span class="sn-tip">${USED_AGAIN_TIP}</span>` : nothing}</li>`;
+      ${x.outcome === 'used' ? html`<span class="sn-tip">${t('review.since.usedTip')}</span>` : nothing}</li>`;
   }
 
   private owner(o: OwnerOutcome) {
@@ -41,7 +44,7 @@ export class DcSinceNudges extends LitElement {
     const order = ['gone', 'handedOver', 'updated', 'used', 'noChange', 'notChecked'];
     const items = [...o.items].sort((a, b) => order.indexOf(a.outcome) - order.indexOf(b.outcome));
     return html`<div class="sn-owner" data-owner=${o.owner}>
-      <div class="sn-head"><strong>${this.name(o.owner)}</strong><span class="muted small">Nudged ${fmtDate(o.sentAt)} · ${parts.join(' · ')}</span></div>
+      <div class="sn-head"><strong>${this.name(o.owner)}</strong><span class="muted small">${t('review.since.ownerLine', { date: fmtDate(o.sentAt), parts: parts.join(' · ') })}</span></div>
       <ul class="sn-items">${items.map((x) => this.item(x))}</ul>
     </div>`;
   }
@@ -49,10 +52,10 @@ export class DcSinceNudges extends LitElement {
   override render() {
     const s = this.since;
     if (!s) return nothing;
-    return html`<calcite-block class="since" data-since="card" heading="Since your nudges" collapsible description=${sinceLine(s)}>
+    return html`<calcite-block class="since" data-since="card" heading=${t('review.since.heading')} collapsible description=${sinceLine(s)}>
       <calcite-icon slot="icon" icon="envelope" scale="s"></calcite-icon>
       <div class="sn-body">
-        <p class="sn-note muted small">Compared with this scan. Changes may have other reasons.</p>
+        <p class="sn-note muted small">${t('review.since.note')}</p>
         ${s.owners.map((o) => this.owner(o))}
       </div>
     </calcite-block>`;

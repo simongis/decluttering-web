@@ -2,6 +2,7 @@
 // Reference date is data.org.scannedAt; usage is [[daysAgo, count], ...] relative to it, lastViewed an ISO time.
 import type { Data, EvaluateResult, Family, Option, Owner, OwnerGroup, Row, Service, Thresholds, TidyHint, UnreachableGroup } from './types';
 import { DAY, agoDays, fmtMonthYear } from './format';
+import { formatNumber, getLocale, t as translate, tn } from '../i18n';
 import { COOLDOWN_DAYS, nudgedRecently } from './cooldown';
 import { byPriority, classifyPriority, cutoffsOf, priorityOf, type Priority } from './priority';
 import { HOUR, SWEEP_HEAVY_REQUESTS, sweepDays, sweepHours, type Sweeps } from './sweep';
@@ -25,17 +26,18 @@ export const SIZE_FLOOR_MB = 10;
 export const USAGE_READ_DAYS = 365;
 /** What Esri says a blank lastViewed means (docs/research/usage-signals-deep-dive.md section 2). */
 export const NO_RECORD_SINCE = 'November 2022';
-const opts = (vals: number[], label: (v: number) => string): Option[] => vals.map((value) => ({ value, label: label(value) }));
-const mbLabel = (v: number) => (v === 0 ? 'Any size' : v >= 1024 ? `${v / 1024} GB` : `${v} MB`);
+const opts = (vals: number[], label: (v: number) => string): Option[] => vals.map((value) => ({ value, get label() { return label(value); } }));
+const mbLabel = (v: number) => (v === 0 ? translate('domain.label.anySize') : v >= 1024 ? `${v / 1024} GB` : `${v} MB`);
 const AGES: [number, string][] = [[90, '3 months'], [180, '6 months'], [270, '9 months'], [365, '1 year'], [730, '2 years'], [1095, '3 years']];
+const ageLabel = (v: number): string => translate(({90:'review.label.month3',180:'review.label.month6',270:'review.label.month9',365:'review.label.year1',730:'review.label.year2',1095:'review.label.year3'} as Record<number, 'review.label.month3'|'review.label.month6'|'review.label.month9'|'review.label.year1'|'review.label.year2'|'review.label.year3'>)[v]);
 export const SIZE_OPTIONS = opts([0, 1, 10, 15, 20, 50, 100, 1024], mbLabel);
 /** "Last used: more than [3 months | 6 months | 9 months | 1 year | 2 years] ago" (research 7.2). */
-export const LAST_USED_OPTIONS: Option[] = AGES.filter(([v]) => v <= 730).map(([value, label]) => ({ value, label }));
-export const UPDATE_OPTIONS: Option[] = AGES.map(([value, label]) => ({ value, label }));
-export const USED_BY_OPTIONS = opts([0, 1, 2, 5], (v) => (v === 0 ? 'No maps or apps' : `At most ${v}`));
+export const LAST_USED_OPTIONS: Option[] = AGES.filter(([v]) => v <= 730).map(([value]) => ({ value, get label() { return ageLabel(value); } }));
+export const UPDATE_OPTIONS: Option[] = AGES.map(([value]) => ({ value, get label() { return ageLabel(value); } }));
+export const USED_BY_OPTIONS = opts([0, 1, 2, 5], (v) => (v === 0 ? translate('domain.label.noMaps') : translate('domain.label.atMost', { count: v })));
 
 /** `suggested` is worked out per org (see suggest.ts); it is not in PRESETS. */
-export const PRESET_NAMES = { suggested: 'Suggested', gentle: 'Gentle', balanced: 'Balanced', strict: 'Strict', custom: 'Custom' } as const;
+export const PRESET_NAMES = { get suggested() { return translate('review.preset.suggested'); }, get gentle() { return translate('review.preset.gentle'); }, get balanced() { return translate('review.preset.balanced'); }, get strict() { return translate('review.preset.strict'); }, get custom() { return translate('review.preset.custom'); } } as const;
 export type PresetName = keyof typeof PRESET_NAMES;
 
 /** Which fixed preset the numbers match: gentle, balanced, strict, or custom. Never returns suggested. */
@@ -55,56 +57,54 @@ export const creditsPerMonth = (sizeMB: number, attachmentMB = 0): number => {
   return ((sizeMB - att) / 10) * 2.4 + (att / 1024) * 1.2;
 };
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const plural = (n: number, one: string, many: string): string => {
+  const key = one === 'day' ? 'common.unit.days' : one === 'credit' ? 'common.unit.credits' : one === 'owner' ? 'common.unit.owners' : one === 'service' ? 'common.unit.services' : one === 'small service' ? 'common.unit.smallServices' : one === 'map or app' ? 'common.unit.maps' : 'common.quantity';
+  return tn(key, n, { count: String(n), unit: n === 1 ? one : many });
+};
 /** 90 -> "3 months", 365 -> "a year", 730 -> "2 years", 45 -> "45 days". */
-export const span = (d: number): string =>
-  (d >= 365 && d % 365 === 0 ? (d === 365 ? 'a year' : `${d / 365} years`) : d >= 60 ? `${Math.round(d / 30.4)} months` : plural(d, 'day', 'days'));
-const byWords = (n: number) => (n === 0 ? 'used by no maps or apps' : `used by at most ${plural(n, 'map or app', 'maps or apps')}`);
-/** "a, b, and c" (the research 7.2 sentence keeps the serial comma). */
-const list = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')}${xs.length > 2 ? ',' : ''} and ${xs[xs.length - 1]}`);
+export const span = (d: number): string => d >= 365 && d % 365 === 0 ? tn('domain.span.year', d / 365, { count: String(d / 365) }) : d >= 60 ? translate('domain.span.months', { count: String(Math.round(d / 30.4)) }) : tn('domain.span.days', d, { count: String(d) });
+const byWords = (n: number) => n === 0 ? translate('domain.describe.usedBy.none') : translate(n === 1 ? 'domain.describe.usedBy.some' : 'domain.describe.usedBy.many', { count: String(n) });
 
 /**
  * A preset (or custom mix) in one plain sentence: "We flag a layer nobody has used for more than 6 months, last
  * updated more than 6 months ago, used by at most 1 map or app, and at least 15 MB." (research 7.2).
  */
-export function describe(t: Thresholds): string {
-  const rest = [`last updated more than ${span(t.minDaysSinceUpdate)} ago`, byWords(t.maxUsedBy)];
-  if (t.minSizeMB) rest.push(`at least ${mbLabel(t.minSizeMB)}`);
-  const lead = t.minDaysSinceUse > 0 ? `We flag a layer nobody has used for more than ${span(t.minDaysSinceUse)}, ` : 'We flag a layer ';
-  return `${lead}${list(rest)}.`;
+export function describe(thresholds: Thresholds, member = false, review = false): string {
+  const useClause = thresholds.minDaysSinceUse > 0 ? translate('domain.describe.useClause', { span: span(thresholds.minDaysSinceUse) }) : '';
+  const hasSize = !!thresholds.minSizeMB;
+  const sizeClause = hasSize ? translate('domain.describe.sizeClause', { size: mbLabel(thresholds.minSizeMB!) }) : '';
+  const byJoin = translate(hasSize ? 'domain.describe.byJoin.size' : 'domain.describe.byJoin.noSize');
+  const key = member ? 'domain.describe.sentence.member' : review ? 'domain.describe.sentence.review' : 'domain.describe.sentence';
+  return translate(key, { useClause, updateSpan: span(thresholds.minDaysSinceUpdate), byJoin, by: byWords(thresholds.maxUsedBy), sizeClause });
 }
 
 /** The thresholds on one short line, for the compact "Starting point": "Last used more than 6 months ago · last updated more than 6 months ago · used by at most 1 map or app · at least 15 MB". */
-export function ruleLine(t: Thresholds): string {
-  const parts = [`last updated more than ${span(t.minDaysSinceUpdate)} ago`, byWords(t.maxUsedBy)];
-  if (t.minDaysSinceUse > 0) parts.unshift(`last used more than ${span(t.minDaysSinceUse)} ago`);
-  if (t.minSizeMB) parts.push(`at least ${mbLabel(t.minSizeMB)}`);
-  const line = parts.join(' · ');
-  return line.charAt(0).toUpperCase() + line.slice(1);
+export function ruleLine(thresholds: Thresholds): string {
+  const useClause = thresholds.minDaysSinceUse > 0 ? translate('domain.rule.useClause', { span: span(thresholds.minDaysSinceUse) }) : '';
+  const sizeClause = thresholds.minSizeMB ? translate('domain.rule.sizeClause', { size: mbLabel(thresholds.minSizeMB!) }) : '';
+  const line = translate('domain.rule.line', { useClause, updateSpan: span(thresholds.minDaysSinceUpdate), by: byWords(thresholds.maxUsedBy), sizeClause });
+  return line.charAt(0).toLocaleUpperCase(getLocale()) + line.slice(1);
 }
 
 type WhyRow = Pick<Row, 'lastUsedDaysAgo' | 'useKnown' | 'noUseRecorded' | 'lastModified' | 'usedBy'> & Partial<Pick<Row, 'numViews' | 'requestsOnly'>>;
 
 /** The last-used part of a why line: "Last used 8 months ago", or the unknown and no-record lines (research 7.2). */
 export function lastUsedWords(row: Pick<WhyRow, 'lastUsedDaysAgo' | 'useKnown' | 'noUseRecorded'>): string {
-  if (row.noUseRecorded) return `No use recorded since at least ${NO_RECORD_SINCE}`;
-  if (!row.useKnown) return "Last used: unknown (we couldn't read all of its use)";
-  if (row.lastUsedDaysAgo === null) return 'No data requests in the last year';
-  return `Last used ${agoDays(row.lastUsedDaysAgo)}`;
+  if (row.noUseRecorded) return translate('domain.why.noUse', { date: NO_RECORD_SINCE });
+  if (!row.useKnown) return translate('domain.why.unknown');
+  if (row.lastUsedDaysAgo === null) return translate('domain.why.noRequests');
+  return translate('domain.why.lastUsed', { ago: agoDays(row.lastUsedDaysAgo) });
 }
 
 /** "585,557 views all time", or null when the scan did not read views. */
-const INT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }); // DC-100: toLocaleString per call was a hot spot
 export const viewsWords = (n: number | null | undefined): string | null =>
-  (typeof n === 'number' ? `${INT.format(Math.round(n))} ${n === 1 ? 'view' : 'views'} all time` : null);
+  (typeof n === 'number' ? tn('domain.views', n, { count: formatNumber(Math.round(n)) }) : null);
 
 /** "Last used 8 months ago · last updated Mar 2024 · used by 1 map or app · 585,557 views all time" (research 7.2). */
 export function whyLine(row: WhyRow): string {
-  const by = row.usedBy === 0 ? 'not used by any maps or apps' : `used by ${plural(row.usedBy, 'map or app', 'maps or apps')}`;
-  const parts = [lastUsedWords(row), `last updated ${fmtMonthYear(row.lastModified)}`, by];
+  const by = row.usedBy === 0 ? translate('domain.why.by.none') : translate(row.usedBy === 1 ? 'domain.why.by.some' : 'domain.why.by.many', { count: String(row.usedBy) });
   const views = viewsWords(row.numViews);
-  if (views) parts.push(views);
-  return parts.join(' · ');
+  return translate(views ? 'domain.why.lineViews' : 'domain.why.line', { lastUsed: lastUsedWords(row), date: fmtMonthYear(row.lastModified), by, views: views ?? '' });
 }
 
 // ---------- scoring ----------
@@ -157,14 +157,10 @@ function buildFamilies(data: Data): Family[] {
 }
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
-const TIP: Record<string, string> = {
-  'description,tags,summary': 'Tip: a short description, a summary and a few tags help colleagues find this.',
-  'description,tags': 'Tip: a short description and a few tags help colleagues find this.',
-  'description,summary': 'Tip: a short description and a summary help colleagues find this.',
-  'tags,summary': 'Tip: a summary and a few tags help colleagues find this.',
-  description: 'Tip: a short description helps colleagues find this.',
-  tags: 'Tip: a few tags help colleagues find this.',
-  summary: 'Tip: a short summary helps colleagues find this.',
+const TIP: Record<string, 'domain.tidy.description.tags.summary' | 'domain.tidy.description.tags' | 'domain.tidy.description.summary' | 'domain.tidy.tags.summary' | 'domain.tidy.description' | 'domain.tidy.tags' | 'domain.tidy.summary'> = {
+  'description,tags,summary': 'domain.tidy.description.tags.summary', 'description,tags': 'domain.tidy.description.tags',
+  'description,summary': 'domain.tidy.description.summary', 'tags,summary': 'domain.tidy.tags.summary',
+  description: 'domain.tidy.description', tags: 'domain.tidy.tags', summary: 'domain.tidy.summary',
 };
 /** Tidy-up hints read from the source service. Never filters anything. */
 export function tidyHintsOf(src: Service): TidyHint[] {
@@ -174,7 +170,7 @@ export function tidyHintsOf(src: Service): TidyHint[] {
   if (!String(src.snippet ?? '').trim()) h.push('summary');
   return h;
 }
-export const tidyTip = (hints: TidyHint[]): string | null => (hints.length ? (TIP[hints.join(',')] ?? null) : null);
+export const tidyTip = (hints: TidyHint[]): string | null => { const key = hints.length ? TIP[hints.join(',')] : undefined; return key ? translate(key) : null; };
 
 /** What a family's members say about use (DC-083). Shared with suggest.ts so both judge use the same way. */
 export interface UseInfo {
@@ -339,6 +335,15 @@ function scoreFamily(f: Family, use: UseInfo, owner: Owner, l: Light, usageCompl
 const isStale = (r: Pick<Row, 'daysSinceUpdate' | 'usedBy' | 'sizeKnown' | 'sizeMB'>, u: UseInfo, t: Thresholds, usageComplete: boolean, depsKnown = true) =>
   unusedFor(u, t.minDaysSinceUse, usageComplete) && r.daysSinceUpdate >= t.minDaysSinceUpdate && (!depsKnown || r.usedBy <= t.maxUsedBy) && (!r.sizeKnown || r.sizeMB >= (t.minSizeMB || 0));
 
+/** GH-2: the source's content status badge against the admin's toggles. Deprecated is in by default, authoritative out. */
+export const isAuthoritative = (s: string | undefined): boolean => s === 'org_authoritative' || s === 'public_authoritative';
+/** The content status toggles that are set, to carry over when a starting point replaces the numbers. */
+export const statusToggles = (t: Thresholds): Pick<Thresholds, 'excludeDeprecated' | 'includeAuthoritative'> => ({
+  ...(t.excludeDeprecated ? { excludeDeprecated: true } : {}), ...(t.includeAuthoritative ? { includeAuthoritative: true } : {}),
+});
+const statusAllowed =(s: string | undefined, t: Thresholds): boolean =>
+  !(t.excludeDeprecated && s === 'deprecated') && (!!t.includeAuthoritative || !isAuthoritative(s));
+
 /** Every family (stale or not) scored under `t`, with `stale` set. Used by the scan screen. */
 /** `depsKnown: false` while maps and apps are still being read: the used-by rule is skipped and priority is capped (ADR 0007, 0010). */
 /** `countSweeps` (DC-086): count sweep days and hours like any other use (the admin's setting; off by default). */
@@ -457,7 +462,7 @@ function computeRows(data: Data, t: Thresholds, opts: EvalOpts): Row[] {
   for (let i = 0; i < n; i++) {
     const sc = scored[i] as Scored;
     knowns[i] = useKnownFor(sc.use, t.minDaysSinceUse, complete);
-    const st = isStale(sc, sc.use, t, complete, depsKnown);
+    const st = isStale(sc, sc.use, t, complete, depsKnown) && statusAllowed(sc.family.source.contentStatus, t);
     stales[i] = st;
     // Unmeasured rows (0 credits so far) would distort the impact cutoffs, so they are left out of them.
     if (st && sc.sizeKnown) staleBases.push(sc);
@@ -604,18 +609,14 @@ export function sizeChangeImpact(data: Data, t: Thresholds, toMB: number, opts: 
 
 /** The dialog copy: "This adds 23 small services from 9 owners, worth about 4 credits a month in total. …" */
 export function smallItemsMessage(i: SizeImpact): string {
-  const worth = i.credits < 1 ? 'less than 1 credit a month' : `about ${plural(Math.round(i.credits), 'credit', 'credits')} a month`;
-  const measuring = i.unmeasured
-    ? ` ${plural(i.unmeasured, 'service is', 'services are')} still being measured, so ${i.unmeasured === 1 ? 'it stays' : 'they stay'} on the list whatever size you pick.`
-    : '';
-  // The verdict follows the numbers: small next to what's already on the list, or thinly spread, or simply worthwhile.
+  const worth = i.credits < 1 ? translate('domain.small.lessCredit') : translate('domain.small.aboutCredits', { count: formatNumber(Math.round(i.credits)) });
+  const measuring = i.unmeasured ? tn('domain.small.measuring', i.unmeasured, { count: formatNumber(i.unmeasured) }) : '';
   const base = i.baseCredits ?? 0;
   const share = base > 0 ? i.credits / base : (i.credits >= 1 ? 1 : 0);
-  const more = base >= 1 && i.credits >= 1 ? `, ${Math.round(share * 100)}% more than the ${Math.round(base)} already on the list` : '';
-  const verdict = i.credits < 1 || share < 0.1
-    ? ' Worth it for a tidy-up, but it adds names to the digest for little saving.'
-    : i.credits / Math.max(1, i.families) < 1
-      ? ' A worthwhile saving, but spread thinly: on average each is worth under a credit a month.'
-      : ' A worthwhile saving.';
-  return `This adds ${plural(i.families, 'small service', 'small services')} from ${plural(i.owners, 'owner', 'owners')}, worth ${worth} in total${more}.${verdict}${measuring}`;
+  const more = base >= 1 && i.credits >= 1 ? translate('domain.small.more', { percent: Math.round(share * 100), base: Math.round(base) }) : '';
+  const verdict = i.credits < 1 || share < 0.1 ? translate('domain.small.verdict.tidy')
+    : i.credits / Math.max(1, i.families) < 1 ? translate('domain.small.verdict.thin') : translate('domain.small.verdict.good');
+  const families = plural(i.families, 'small service', 'small services');
+  const owners = plural(i.owners, 'owner', 'owners');
+  return translate('domain.small.sentence', { families, owners, worth, more, verdict, measuring });
 }

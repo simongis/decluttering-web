@@ -1,12 +1,30 @@
-// ADR 0013: the words of the "Turn on sending" opt-in. Warm and reassuring; one source for Emails and the access checklist.
-export const TURN_ON_HEADING = 'Turn on sending for you?';
-export const TURN_ON_POINTS: readonly string[] = [
-  'You’re in control. Nothing is sent until you choose.',
-  'We’ll set up one small hidden group in your org that only you can see.',
-  'Each owner gets one friendly email, at most once every six months.',
-  'You can switch it off any time.',
-];
-export const TURN_ON_YES = 'Turn on sending';
-export const TURN_ON_NO = 'Not now';
-/** After a successful turn-on. */
-export const TURN_ON_NEXT = 'Send yourself a test first. It goes only to you, so you can see exactly what owners will get.';
+// ADR 0013: the words of the “Turn on sending” opt-in, shared with the access checklist.
+import { onLocaleChange, t } from '../../i18n';
+
+export function turnOnCopy() {
+  return {
+    heading: t('access.turnOn.heading'),
+    points: [t('access.turnOn.point.control'), t('access.turnOn.point.group'), t('access.turnOn.point.frequency'), t('access.turnOn.point.off')],
+    yes: t('access.turnOn.yes'),
+    no: t('access.turnOn.no'),
+    next: t('access.turnOn.next'),
+  };
+}
+
+export let TURN_ON_HEADING = '';
+export let TURN_ON_POINTS: readonly string[] = [];
+export let TURN_ON_YES = '';
+export let TURN_ON_NO = '';
+export let TURN_ON_NEXT = '';
+
+function refreshTurnOnCopy(): void {
+  const copy = turnOnCopy();
+  TURN_ON_HEADING = copy.heading;
+  TURN_ON_POINTS = copy.points;
+  TURN_ON_YES = copy.yes;
+  TURN_ON_NO = copy.no;
+  TURN_ON_NEXT = copy.next;
+}
+
+refreshTurnOnCopy();
+onLocaleChange(refreshTurnOnCopy);

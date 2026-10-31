@@ -1,8 +1,6 @@
-// DC-021: the words on the About page, as plain data so a test can check them and one place edits them.
-// Each section has a short lead (two sentences at most) and, behind an expander, the detail. The "last used" wording
-// matches the info popovers in src/ui/review/dc-filters.ts (USAGE_*). Rule numbers come from PRESETS so they can't drift.
-// DC-110: plain, warm copy (docs/tone-of-voice.md), the GitHub line, the self-hosted line and two small diagrams.
-import { PRESETS, PRESET_NAMES, span } from '../../domain/stale';
+// About copy stays data-shaped for tests; values are refreshed from the active catalogue on locale changes.
+import { onLocaleChange, t } from '../../i18n';
+import { PRESETS } from '../../domain/stale';
 
 export type Block = { p: string } | { ul: string[] };
 export type FlowId = 'email' | 'data';
@@ -10,158 +8,123 @@ export interface AboutSection { id: string; title: string; lead: string; detail:
 export interface FlowStep { icon: string; label: string; note: string }
 export interface Flow { label: string; steps: FlowStep[] }
 
-const preset = (k: 'gentle' | 'balanced' | 'strict') => `${PRESET_NAMES[k]} ${span(PRESETS[k].minDaysSinceUse).replace(/^a /, '1 ')}`;
-
 /** FB-80: the author's LinkedIn profile (user's choice 2026-10-22); it replaced the Esri Australia contact page here. */
 export const CONTACT_URL = 'https://www.linkedin.com/in/simongis/';
-export const CONTACT_LINK_TEXT = 'Contact me';
-export const REPO_TEXT_LINKED = 'Source code on GitHub';
+export let CONTACT_LINK_TEXT = '';
+export let REPO_TEXT_LINKED = '';
 /** FB-79: the public repository. Every build links to it; VITE_REPO_URL overrides it (a fork or self-host). */
 export const REPO_URL = 'https://github.com/simongis/decluttering-web';
 
 /** A gentle disclaimer at the foot of the open-source section (user, 2026-10-23); the README has the full one. */
-export const OPEN_DISCLAIMER = {
-  before: "Decluttering is an independent, open-source project, not an Esri or Esri Australia product. It's offered as is: send yourself a test first, and check it fits your organisation's policies. You're welcome to ",
-  linkText: 'review the code on GitHub',
-  after: '.',
-} as const;
+export let OPEN_DISCLAIMER = { before: '', linkText: '', after: '' };
 
 /** The GitHub line: always a link. VITE_REPO_URL wins when it is a web address, otherwise the public repository. */
 export function repoLine(url: string | undefined): { text: string; href: string } {
   const u = (url ?? '').trim();
-  return { text: REPO_TEXT_LINKED, href: /^https?:\/\//i.test(u) ? u : REPO_URL };
+  return { text: t('about.repo'), href: /^https?:\/\//i.test(u) ? u : REPO_URL };
 }
 
 /** Esri's page on the "approved apps" security setting (desk research, ADR 0013). */
 export const APPROVED_APPS_URL = 'https://doc.arcgis.com/en/arcgis-online/administer/configure-security.htm';
-export const APPROVED_APPS_LINK_TEXT = 'Esri: configure organisation security';
+export let APPROVED_APPS_LINK_TEXT = '';
 
 /** Small diagrams drawn with Calcite icons. Each renders as one role="img" whose aria-label is `label`. */
-export const FLOWS: Record<FlowId, Flow> = {
-  email: {
-    label: 'How the email is sent: you choose to send. The app uses a hidden group that only you can see. Each owner gets one email. A row is added to your nudge log, a table in your org.',
-    steps: [
-      { icon: 'user', label: 'You', note: 'choose to send' },
-      { icon: 'group', label: 'Hidden group', note: 'only you can see it' },
-      { icon: 'envelope', label: 'One email', note: 'to each owner' },
-      { icon: 'table', label: 'Nudge log', note: 'a table in your org' },
-    ],
-  },
-  data: {
-    label: 'Your data: your browser talks only to your own ArcGIS Online org. There is no Decluttering server.',
-    steps: [
-      { icon: 'browser', label: 'Your browser', note: 'where this runs' },
-      { icon: 'organization', label: 'Your org', note: 'the only place it talks to' },
-    ],
-  },
-};
+export let FLOWS: Record<FlowId, Flow> = { email: { label: '', steps: [] }, data: { label: '', steps: [] } };
 
 /** FB-70: the Back link label for the route About was opened from. */
 export function backLabel(route: string | undefined): string {
   switch (route) {
-    case 'review': case 'emails': return 'Back to Review';
-    case 'app': return 'Back to the scan';
-    case 'demo': case 'demo-emails': return 'Back to the demo';
-    default: return 'Back to home';
+    case 'review': case 'emails': return t('about.back.review');
+    case 'app': return t('about.back.scan');
+    case 'demo': case 'demo-emails': return t('about.back.demo');
+    default: return t('about.back.home');
   }
 }
 
 /** FB-71: the "not supported" line; links to {repo}/issues. */
 export function issuesLine(url: string | undefined): { before: string; link: { text: string; href: string }; after: string } {
   const r = repoLine(url);
-  const before = 'Decluttering is offered as is, without formal support. You can raise issues ';
-  return { before, link: { text: 'on GitHub', href: r.href.replace(/\/+$/, '') + '/issues' }, after: '.' };
+  return { before: t('about.issues.before'), link: { text: t('about.issues.link'), href: r.href.replace(/\/+$/, '') + '/issues' }, after: t('about.issues.after') };
 }
 
-export const ABOUT_INTRO = 'Decluttering helps you tidy your ArcGIS Online org by asking people, never by deleting anything.';
+export let ABOUT_INTRO = '';
+export let ABOUT_SECTIONS: AboutSection[] = [];
 
-export const ABOUT_SECTIONS: AboutSection[] = [
-  {
-    id: 'what',
-    title: 'What it does',
-    lead: "It spots hosted feature layers nobody seems to be using, then sends their owners one friendly email. It never deletes or changes anyone's items.",
-    detail: [
-      { p: 'You look over what it found, pick who to nudge, and send. The owners decide what happens to their own layers.' },
-    ],
-  },
-  {
-    id: 'stale',
-    title: 'How "stale" is decided',
-    lead: 'A layer gets picked out when it hasn’t been used or updated for a while, few maps or apps use it, and it is big enough to matter. Every number is yours to see and change.',
-    detail: [
-      { p: 'For example: a 40 MB layer nobody has opened since March, last edited two years ago, and used by no maps or apps. It ticks every box, so it is picked out. If lots of maps and apps used it, it would be left alone.' },
-      { p: '"Used by" is the number of maps and apps in your org that use the layer: the items that depend on it. A layer other items rely on is one to be careful with.' },
-      { p: `You don’t have to start from scratch. Three starting points fill in the numbers: ${preset('gentle')}, ${preset('balanced')}, ${preset('strict')}. A layer must meet all four parts: last used more than that long ago, last updated more than that long ago, used by at most a set number of maps or apps, and at least the minimum size.` },
-      { p: '"Last used" is the newer of two dates ArcGIS Online keeps for a layer and its hosted views: when it was last opened, and the last day (UTC) its data was requested.' },
-      { ul: [
-        'Counts as use: opening it (its item page, Map Viewer, or a map or app that uses it), and a map, app, script or admin requesting its data.',
-        'Set aside: one or two requests on a day when many layers were touched, which is usually a crawler. More than 10 requests still counts.',
-        "Does not count: Decluttering itself. It never requests your layers' data.",
-      ] },
-      { p: 'The little bars on each layer show the days with data requests in the last 13 weeks, today included. One request makes a day. They are there for context only.' },
-      { p: 'When it can’t be sure, it leans towards "used". If a layer\'s usage can’t be fully read, it shows "Last used: unknown" and is never picked out. A blank "last viewed" means no use has been recorded since November 2022.' },
-    ],
-  },
-  {
-    id: 'views',
-    title: 'Total views',
-    lead: 'Total views is there for context, and for sorting ("Least viewed"). It isn’t part of the rule.',
-    detail: [
-      { p: 'It counts all time, so it can’t tell you whether anyone is looking at a layer now. Last used already covers every view, and more.' },
-      { p: 'Every view also counts as use, so a views limit would only hide layers that Last used already calls idle. Sort by Least viewed to see the rarely opened ones first.' },
-      { p: "A layer's views go up by one when its item page, Map Viewer, or an app loading the layer by item id opens it. Drawing, panning and querying the layer don’t add views." },
-    ],
-  },
-  {
-    id: 'data',
-    title: 'Your data',
-    lead: 'The scan only reads your org. Nothing leaves your browser except to your own ArcGIS Online org.',
-    flow: 'data',
-    detail: [
-      { p: 'There is no Decluttering server and no third-party storage. If you choose to keep a nudge log, it is a hosted table in your own org. It records who was nudged, when, and which items. It never keeps the message text.' },
-      { p: 'Your settings and the last scan stay in this browser only, and you can clear them any time.' },
-      // DC-104: said only on a build that carries the Cloudflare beacon (the hosted site), so it is never claimed elsewhere.
-      ...(import.meta.env.VITE_CF_BEACON_TOKEN
-        ? [{ p: 'This site counts anonymous page views with Cloudflare Web Analytics: no cookies, and nothing about your org, its items or its people.' }]
-        : []),
-    ],
-  },
-  {
-    id: 'email',
-    title: 'How the email is sent',
-    lead: 'ArcGIS Online sends notifications through groups, so sending uses one hidden, invitation-only group. Each owner gets one digest, then is left alone for six months.',
-    flow: 'email',
-    detail: [
-      { p: 'The group is created only when you choose to send, and only after asking you. For each owner the app adds them, notifies them and removes them, so the group is empty between sends.' },
-      { p: 'A test send goes to you, not to the owner. A real send happens only when you confirm it.' },
-      { p: 'The hidden group and the nudge log are the only things the app creates. Both are labelled “Decluttering” in ArcGIS Online, and you can remove either one from “App data in your org” below.' },
-    ],
-  },
-  {
-    id: 'touches',
-    title: 'What the scan touches',
-    lead: "To see what uses each layer, the scan looks inside every map and app. It never touches the layers' data.",
-    detail: [
-      { p: 'Looking inside a map or app adds one view to it, the first time. Later scans only re-read the maps and apps that have changed since.' },
-    ],
-  },
-  {
-    id: 'approved',
-    title: 'For administrators: approving Decluttering',
-    lead: 'If your organisation only lets members sign in to approved apps, Decluttering needs to be on that list first.',
-    detail: [
-      { p: "Where: ArcGIS Online › Organization › Settings › Security › Approved apps. If a label differs in your version, look for the Approved apps list in your organisation's security settings." },
-      { p: 'What: add Decluttering to the list. It is a browser-only app: it reads your org to build the review, and it only creates anything if an admin turns on sending for themselves.' },
-      { p: "We'll add exact steps here once we've confirmed them in an organisation with this setting on." },
-    ],
-  },
-  {
-    id: 'open',
-    title: 'Open source and customisable',
-    lead: 'You can read exactly what Decluttering does, and adapt it to your own org.',
-    detail: [
-      { p: 'The code is open, so your team can check the rules, change the wording of the email, or run its own copy.' },
-      { p: 'Want it inside your own network, sending through your own mail server? Get in touch about a self-hosted version.' },
-    ],
-  },
-];
+function refreshAboutCopy(): void {
+  CONTACT_LINK_TEXT = t('about.contact');
+  REPO_TEXT_LINKED = t('about.repo');
+  OPEN_DISCLAIMER = { before: t('about.disclaimer.before'), linkText: t('about.disclaimer.link'), after: t('about.disclaimer.after') };
+  APPROVED_APPS_LINK_TEXT = t('about.approvedApps.link');
+  FLOWS = {
+    email: {
+      label: t('about.flow.email.label'),
+      steps: [
+        { icon: 'user', label: t('about.flow.email.you'), note: t('about.flow.email.youNote') },
+        { icon: 'group', label: t('about.flow.email.group'), note: t('about.flow.email.groupNote') },
+        { icon: 'envelope', label: t('about.flow.email.oneEmail'), note: t('about.flow.email.oneEmailNote') },
+        { icon: 'table', label: t('about.flow.email.log'), note: t('about.flow.email.logNote') },
+      ],
+    },
+    data: {
+      label: t('about.flow.data.label'),
+      steps: [
+        { icon: 'browser', label: t('about.flow.data.browser'), note: t('about.flow.data.browserNote') },
+        { icon: 'organization', label: t('about.flow.data.org'), note: t('about.flow.data.orgNote') },
+      ],
+    },
+  };
+  ABOUT_INTRO = t('about.intro');
+  const p = (key: Parameters<typeof t>[0], params?: Record<string, string | number>): Block => ({ p: t(key, params) });
+  const ul = (...keys: Parameters<typeof t>[0][]): Block => ({ ul: keys.map((key) => t(key)) });
+  const duration = (days: number) => t(days >= 365 ? 'about.duration.year' : days >= 180 ? 'about.duration.sixMonths' : 'about.duration.threeMonths');
+  const durations = {
+    gentle: t('about.preset.gentle', { duration: duration(PRESETS.gentle.minDaysSinceUse) }),
+    balanced: t('about.preset.balanced', { duration: duration(PRESETS.balanced.minDaysSinceUse) }),
+    strict: t('about.preset.strict', { duration: duration(PRESETS.strict.minDaysSinceUse) }),
+  };
+  ABOUT_SECTIONS = [
+    {
+      id: 'what', title: t('about.what.title'), lead: t('about.what.lead'),
+      detail: [p('about.what.detail.1')],
+    },
+    {
+      id: 'stale', title: t('about.stale.title'), lead: t('about.stale.lead'),
+      detail: [
+        p('about.stale.detail.1'), p('about.stale.detail.2'),
+        p('about.stale.detail.3', durations), p('about.stale.detail.4'),
+        ul('about.stale.detail.5a', 'about.stale.detail.5b', 'about.stale.detail.5c'),
+        p('about.stale.detail.6'), p('about.stale.detail.7'),
+      ],
+    },
+    {
+      id: 'views', title: t('about.views.title'), lead: t('about.views.lead'),
+      detail: [p('about.views.detail.1'), p('about.views.detail.2'), p('about.views.detail.3')],
+    },
+    {
+      id: 'data', title: t('about.data.title'), lead: t('about.data.lead'), flow: 'data',
+      detail: [
+        p('about.data.detail.1'), p('about.data.detail.2'),
+        ...(import.meta.env.VITE_CF_BEACON_TOKEN ? [p('about.data.detail.3')] : []),
+      ],
+    },
+    {
+      id: 'email', title: t('about.email.title'), lead: t('about.email.lead'), flow: 'email',
+      detail: [p('about.email.detail.1'), p('about.email.detail.2'), p('about.email.detail.3')],
+    },
+    {
+      id: 'touches', title: t('about.touches.title'), lead: t('about.touches.lead'),
+      detail: [p('about.touches.detail.1')],
+    },
+    {
+      id: 'approved', title: t('about.approved.title'), lead: t('about.approved.lead'),
+      detail: [p('about.approved.detail.1'), p('about.approved.detail.2'), p('about.approved.detail.3')],
+    },
+    {
+      id: 'open', title: t('about.open.title'), lead: t('about.open.lead'),
+      detail: [p('about.open.detail.1'), p('about.open.detail.2')],
+    },
+  ];
+}
+
+refreshAboutCopy();
+onLocaleChange(refreshAboutCopy);

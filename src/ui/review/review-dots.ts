@@ -3,6 +3,7 @@
 // the stale zone moves and the dots recolour when a filter changes, and the dots in the zone are the list.
 import type { Data, Thresholds } from '../../domain/types';
 import { PRESET_NAMES, type PresetName } from '../../domain/stale';
+import { t } from '../../i18n';
 import { buildDots, type DotModel } from '../scan/dots';
 
 export interface ReviewDotsOpts { depsKnown: boolean; countSweeps: boolean }
@@ -13,7 +14,7 @@ export function reviewDots(data: Data, t: Thresholds, opts: ReviewDotsOpts): Dot
 }
 
 /** The stale zone's label: the starting point in force, or "your rule" for Custom. */
-export const zoneName = (shown: PresetName): string => (shown === 'custom' ? 'your rule' : PRESET_NAMES[shown]);
+export const zoneName = (shown: PresetName): string => (shown === 'custom' ? t('review.dots.yourRule') : PRESET_NAMES[shown]);
 
 /** The chart card's two views, remembered per browser. */
 export type ChartView = 'stale' | 'owner';

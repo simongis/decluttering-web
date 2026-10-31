@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { APPROVAL_MESSAGE, DECLINED_MESSAGE, oauthErrorMessage, oauthMessageFor, parseOAuthError } from './oauth-error';
+import { setLocale } from '../i18n';
 
 describe('parseOAuthError', () => {
   it('reads error and description', () => {
@@ -19,6 +20,13 @@ describe('oauthErrorMessage', () => {
 });
 
 describe('oauthMessageFor (DC-125f)', () => {
+  it('localizes friendly failures in Spanish', async () => {
+    await setLocale('es', false);
+    try {
+      expect(DECLINED_MESSAGE).toBe('No pasa nada, no se compartió nada. Vuelve a iniciar sesión cuando quieras.');
+      expect(oauthMessageFor('server_error', '')).toBe('No se pudo completar el inicio de sesión. Algunas organizaciones solo permiten aplicaciones aprobadas por un administrador. Si es tu caso, la guía de la página Acerca de explica qué debes pedir. Después, vuelve a intentarlo.');
+    } finally { await setLocale('en', false); }
+  });
   it('treats access_denied as the person saying no, calmly, with no ArcGIS detail', () => {
     expect(oauthMessageFor('access_denied', 'The user denied access')).toBe(DECLINED_MESSAGE);
     expect(DECLINED_MESSAGE).toBe("No problem, nothing was shared. Sign in again whenever you're ready.");

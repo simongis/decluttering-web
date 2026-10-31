@@ -1,3 +1,5 @@
+import { onLocaleChange, t } from '../i18n';
+
 /** Access modes, worked out from privileges (not role names). See docs/adr/0008-sign-in-and-access-levels.md. */
 export type AccessMode = 'admin' | 'admin-cant-send' | 'my-items';
 
@@ -30,13 +32,14 @@ export type CapabilityLevel = 'full' | 'review' | 'locked' | 'mine';
 export interface Capabilities { items: Capability[]; level: CapabilityLevel; summary: string }
 
 export const CAPABILITY_SUMMARY: Record<CapabilityLevel, string> = {
-  full: 'You’re all set: full review and sending.',
-  review: 'Review only: you can look through the whole org, but not send nudges.',
-  locked: 'Review only for now: your account could send, but sending isn’t turned on for you yet.',
-  mine: 'Your own layers: we’ll look through the ones you own.',
+  get full() { return t('access.summary.full'); },
+  get review() { return t('access.summary.review'); },
+  get locked() { return t('access.summary.locked'); },
+  get mine() { return t('access.summary.mine'); },
 };
 
-export const SENDING_UNAVAILABLE_LINE = 'Sending isn’t available on this site yet. You can still review everything and write the emails.';
+export let SENDING_UNAVAILABLE_LINE = t('access.sendingUnavailable');
+onLocaleChange(() => { SENDING_UNAVAILABLE_LINE = t('access.sendingUnavailable'); });
 
 /**
  * What this account can do here, from the same facts sign-in already holds: the privileges, whether the usage probe
@@ -49,15 +52,15 @@ export function capabilities(privileges: string[] | undefined, usageReadable: bo
   const has = (list: readonly string[]) => list.every((p) => have.has(p));
   const view = has(ADMIN_PRIVILEGES), send = has(SEND_PRIVILEGES);
   const items: Capability[] = [
-    { id: 'view', state: view ? 'yes' : 'no', label: 'See everyone’s layers',
-      line: view ? 'Review the whole org.' : 'You’ll see your own layers only.' },
-    { id: 'usage', state: usageReadable ? 'yes' : 'no', label: 'Read how layers are used',
-      line: usageReadable ? 'Last used is available.' : 'Last used won’t be available; the other rules still work.' },
-    { id: 'send', state: send ? 'yes' : 'no', label: 'Send nudges',
-      line: send ? 'You can create the group and add owners to it.' : 'You can review, but sending needs these privileges. Ask an administrator.' },
-    { id: 'org-send', state: on ? 'yes' : 'neutral', label: 'Sending in this org',
-      line: on ? 'On for you. Send yourself a test first. It goes only to you, so you can see exactly what owners will get.'
-        : mayOptIn ? 'Off for you. Turn it on when you’re ready; nothing is sent until you choose.'
+    { id: 'view', state: view ? 'yes' : 'no', label: t('access.capability.view.label'),
+      line: view ? t('access.capability.view.full') : t('access.capability.view.own') },
+    { id: 'usage', state: usageReadable ? 'yes' : 'no', label: t('access.capability.usage.label'),
+      line: usageReadable ? t('access.capability.usage.available') : t('access.capability.usage.unavailable') },
+    { id: 'send', state: send ? 'yes' : 'no', label: t('access.capability.send.label'),
+      line: send ? t('access.capability.send.available') : t('access.capability.send.unavailable') },
+    { id: 'org-send', state: on ? 'yes' : 'neutral', label: t('access.capability.orgSend.label'),
+      line: on ? t('access.capability.orgSend.on')
+        : mayOptIn ? t('access.capability.orgSend.off')
         : SENDING_UNAVAILABLE_LINE,
       ...(mayOptIn && !on && send ? { action: 'turn-on' as const } : on ? { action: 'turn-off' as const } : {}) },
   ];
@@ -66,7 +69,8 @@ export function capabilities(privileges: string[] | undefined, usageReadable: bo
 }
 
 /** DC-121: shown on the checklist and as the test-send block reason. */
-export const NO_ADMIN_EMAIL = 'Your ArcGIS Online profile has no email address, so a test has nowhere to go. Add one in your profile, then come back.';
+export let NO_ADMIN_EMAIL = t('access.noAdminEmail');
+onLocaleChange(() => { NO_ADMIN_EMAIL = t('access.noAdminEmail'); });
 
 /**
  * DC-121: the "Your email address" row. `undefined` means the address isn't known (not loaded), so there is no row;
@@ -75,7 +79,7 @@ export const NO_ADMIN_EMAIL = 'Your ArcGIS Online profile has no email address, 
 export function emailCapability(email: string | undefined): Capability | null {
   if (email === undefined) return null;
   const e = email.trim();
-  return { id: 'email', state: e ? 'yes' : 'no', label: 'Your email address', line: e || NO_ADMIN_EMAIL };
+  return { id: 'email', state: e ? 'yes' : 'no', label: t('access.capability.email.label'), line: e || NO_ADMIN_EMAIL };
 }
 
 /** The privileges an access mode stands for (sign-in keeps the mode, not the list). */

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { stepsFor, stepLine, EMAILS_HINT, type StepsInput } from './steps';
+import { stepsFor, stepLine, type StepsInput } from './steps';
+import { t } from '../../i18n';
+
+const EMAILS_HINT = t('steps.emailsHint');
 
 const base: StepsInput = { showing: 'review', hasData: true, hasScan: true, ticked: 0, noEmails: false };
 const states = (i: Partial<StepsInput>) => stepsFor({ ...base, ...i }).map((s) => `${s.id}:${s.state}`);

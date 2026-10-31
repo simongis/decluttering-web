@@ -1,8 +1,10 @@
 import { LitElement, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { LocaleController } from '../../i18n/controller';
+import { t } from '../../i18n';
 import '@esri/calcite-components/dist/components/calcite-action';
 import '@esri/calcite-components/dist/components/calcite-icon';
-import { QUIPS, QUIP_EVERY_MS, QUIP_FADE_MS, QUIP_SHOW_AFTER_MS, createRotation, createTipState, safeUrl, type Quip } from './quips';
+import { QUIP_EVERY_MS, QUIP_FADE_MS, QUIP_SHOW_AFTER_MS, createRotation, createTipState, getQuipSource, localizedQuip, safeUrl, type Quip } from './quips';
 
 /**
  * DC-063: one friendly rotating tip under the scan progress (docs/research/waiting-ux.md).
@@ -15,11 +17,12 @@ import { QUIPS, QUIP_EVERY_MS, QUIP_FADE_MS, QUIP_SHOW_AFTER_MS, createRotation,
 export class DcTips extends LitElement {
   @property({ type: Number, attribute: 'show-after-ms' }) showAfterMs = QUIP_SHOW_AFTER_MS;
   @property({ type: Number, attribute: 'every-ms' }) everyMs = QUIP_EVERY_MS;
-  @property({ attribute: false }) list: Quip[] = QUIPS;
+  @property({ attribute: false }) list?: Quip[];
+  private readonly _locale = new LocaleController(this);
   @state() private quip: Quip | null = null;
   @state() private paused = false;
 
-  private rot = createRotation(QUIPS);
+  private rot = createRotation(getQuipSource());
   private tips = createTipState();
   private timer = 0; private showTimer = 0; private fadeTimer = 0; private swapId = 0;
   /** A11Y-09: followed live (see dc-dot-map). */
@@ -32,12 +35,12 @@ export class DcTips extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.reduce = this.rmq?.matches ?? false; this.rmq?.addEventListener?.('change', this.onReduceChange);
-    this.rot = createRotation(this.list);
+    this.rot = createRotation(this.list ?? getQuipSource());
     this.addEventListener('pointerenter', this.hold);
     this.addEventListener('pointerleave', this.release);
     this.addEventListener('focusin', this.hold);
     this.addEventListener('focusout', () => setTimeout(this.release));
-    if (this.list.length) this.showTimer = window.setTimeout(() => { this.set(); this.arm(); }, this.showAfterMs);
+    if ((this.list ?? getQuipSource()).length) this.showTimer = window.setTimeout(() => { this.set(); this.arm(); }, this.showAfterMs);
   }
 
   override disconnectedCallback(): void {
@@ -101,13 +104,14 @@ export class DcTips extends LitElement {
   protected override render() {
     const q = this.quip;
     if (!q) return nothing;
-    const href = q.url ? safeUrl(q.url) : null;
+    const localized = this.list ? q : localizedQuip(q);
+    const href = localized.url ? safeUrl(localized.url) : null;
     return html`
-      <div class="dc-tip" role="group" aria-label="While you wait" data-scan="tip">
+      <div class="dc-tip" role="group" aria-label=${t('scan.tip.while-wait')} data-scan="tip">
         <calcite-icon scale="s" icon=${q.kind === 'tip' ? 'lightbulb' : 'smile'} aria-hidden="true"></calcite-icon>
-        <span class="dc-tip-body"><span data-tip="text">${q.text}</span>${href ? html` <a data-tip="link" href=${href} target="_blank" rel="noopener noreferrer">${q.linkText || 'Read more'}<span class="dc-sr"> (opens in a new tab)</span></a>` : nothing}</span>
-        <calcite-action data-tip="pause" scale="s" text-enabled icon=${this.paused ? 'play' : 'pause'} text=${this.paused ? 'Play tips' : 'Pause tips'} aria-pressed=${this.paused ? 'true' : 'false'} @click=${() => this.toggle()}></calcite-action>
-        <calcite-action data-tip="next" scale="s" text-enabled icon="chevron-right" text="Next tip" @click=${() => { void this.swap(); if (this.tips.running) this.arm(); }}></calcite-action>
+        <span class="dc-tip-body"><span data-tip="text">${localized.text}</span>${href ? html` <a data-tip="link" href=${href} target="_blank" rel="noopener noreferrer">${localized.linkText || t('scan.tip.read-more')}<span class="dc-sr">${t('scan.tip.opens-new-tab')}</span></a>` : nothing}</span>
+        <calcite-action data-tip="pause" scale="s" text-enabled icon=${this.paused ? 'play' : 'pause'} text=${this.paused ? t('scan.tip.play') : t('scan.tip.pause')} aria-pressed=${this.paused ? 'true' : 'false'} @click=${() => this.toggle()}></calcite-action>
+        <calcite-action data-tip="next" scale="s" text-enabled icon="chevron-right" text=${t('scan.tip.next')} @click=${() => { void this.swap(); if (this.tips.running) this.arm(); }}></calcite-action>
       </div>`;
   }
 }

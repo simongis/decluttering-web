@@ -5,20 +5,28 @@
 //    succeeded this session (DC-125b, ./unlock), and only ever happens after the confirm dialog. The demo uses an in-memory fake, so it
 //    can show the whole flow.
 //  - Defence in depth: the real notifier is wrapped so owner sends throw while locked, whatever the UI does.
+import { onLocaleChange, t } from '../../i18n';
 import type { GroupNotifier } from '../../notify';
 import type { NudgeLog } from '../../log';
-import { NO_ADMIN_EMAIL, SENDING_UNAVAILABLE_LINE } from '../../auth/access';
+import { SENDING_UNAVAILABLE_LINE } from '../../auth/access';
 import { dayFull, SEND_LIMITS } from './limits';
 
-export const OWNER_SENDS_OFF = 'Sending to owners is locked until you send yourself a test';
+export let OWNER_SENDS_OFF = 'Sending to owners is locked until you send yourself a test';
 /** Beside the disabled "Send to N owners" button until this session's test has succeeded (DC-125b). */
-export const TEST_FIRST = 'Send yourself a test first. It takes a moment, and you’ll see exactly what owners get.';
+export let TEST_FIRST = 'Send yourself a test first. It takes a moment, and you’ll see exactly what owners get.';
 /** Why it asks again in a new session. */
-export const TEST_EACH_SESSION = 'We ask for a quick test each time you sit down to send, so the email you check is the one that goes out.';
+export let TEST_EACH_SESSION = 'We ask for a quick test each time you sit down to send, so the email you check is the one that goes out.';
 /** Shown wherever sending would be when this site (or this org) can't turn it on: calm, and not a fault of the admin. */
-export const SENDING_UNAVAILABLE = SENDING_UNAVAILABLE_LINE;
+export let SENDING_UNAVAILABLE = SENDING_UNAVAILABLE_LINE;
 /** The test block reason while the admin has not turned sending on. */
-export const NOT_OPTED_IN = 'Turn on sending to send yourself a test.';
+export let NOT_OPTED_IN = 'Turn on sending to send yourself a test.';
+onLocaleChange(() => {
+  OWNER_SENDS_OFF = t('emails.gate.owner.off');
+  TEST_FIRST = t('emails.gate.test.first');
+  TEST_EACH_SESSION = t('emails.gate.test.session');
+  SENDING_UNAVAILABLE = t('emails.gate.unavailable');
+  NOT_OPTED_IN = t('emails.gate.not.opted');
+});
 
 /**
  * Whether owner sends are unlocked. A plain boolean, or a function read at every call so the lock can be lifted
@@ -52,18 +60,18 @@ export type BlockReason = 'read-only' | 'not-opted-in' | 'checking' | 'no-privil
 export interface Gate { test: { ok: boolean; reason?: BlockReason; message?: string }; owners: { ok: boolean; reason?: BlockReason; message?: string } }
 
 export function sendGate(g: GateInput): Gate {
-  const noPriv = `Your ArcGIS Online role doesn't have ${g.missing || 'the “Create groups” privilege'}, and sending needs one small hidden group.`;
-  const base: Gate['test'] = !g.mayOptIn && !g.demo ? { ok: false, reason: 'read-only', message: SENDING_UNAVAILABLE }
-    : g.canCreate === null ? { ok: false, reason: 'checking', message: 'Checking your role…' }
+  const noPriv = t('emails.role.privilege', { missing: g.missing || t('emails.role.create.groups') });
+  const base: Gate['test'] = !g.mayOptIn && !g.demo ? { ok: false, reason: 'read-only', message: t('emails.gate.unavailable') }
+    : g.canCreate === null ? { ok: false, reason: 'checking', message: t('emails.role.checking') }
     : !g.canCreate ? { ok: false, reason: 'no-privilege', message: noPriv }
-    : !g.optedIn && !g.demo ? { ok: false, reason: 'not-opted-in', message: NOT_OPTED_IN }
+    : !g.optedIn && !g.demo ? { ok: false, reason: 'not-opted-in', message: t('emails.gate.not.opted') }
     : { ok: true };
-  const nobody = g.owners > 0 || !base.ok ? base : { ok: false, reason: 'nobody' as const, message: 'Tick at least one owner first.' };
+  const nobody = g.owners > 0 || !base.ok ? base : { ok: false, reason: 'nobody' as const, message: t('emails.role.tick.owner') };
   // DC-121: only the test goes to the admin, so only the test needs the admin's address.
   const noEmail = base.ok && g.adminEmail !== undefined && !g.adminEmail.trim();
-  const test: Gate['test'] = noEmail ? { ok: false, reason: 'no-email', message: NO_ADMIN_EMAIL } : nobody;
+  const test: Gate['test'] = noEmail ? { ok: false, reason: 'no-email', message: t('emails.role.no.email') } : nobody;
   let owners: Gate['owners'] = nobody;
-  if (nobody.ok && !g.demo && g.ownerSendsUnlocked !== true) owners = { ok: false, reason: 'test-first', message: TEST_FIRST };
+  if (nobody.ok && !g.demo && g.ownerSendsUnlocked !== true) owners = { ok: false, reason: 'test-first', message: t('emails.gate.test.first') };
   else if (nobody.ok && g.sentToday !== undefined && !(g.sentToday < (g.perDay ?? SEND_LIMITS.perDay))) owners = { ok: false, reason: 'daily-limit', message: dayFull(g.perDay ?? SEND_LIMITS.perDay) };
   return { test, owners };
 }
@@ -87,7 +95,7 @@ export function nextSendStep(s: SendStep, e: SendStepEvent, gate: Gate): SendSte
 /* ------------------------------------------------------------ the notifier, with owner sends switched off */
 
 export class OwnerSendsOff extends Error {
-  constructor() { super(OWNER_SENDS_OFF); this.name = 'OwnerSendsOff'; }
+  constructor() { super(t('emails.gate.owner.off')); this.name = 'OwnerSendsOff'; }
 }
 
 /**

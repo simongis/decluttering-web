@@ -1,11 +1,13 @@
+import { t } from '../../i18n';
+
 // DC-063: port of prototypes/d-converged/quips.js; a test keeps the two lists identical. Original lines, written for this app.
-// Edit the list freely; QUIPS = [] switches the feature off.
+// Edit the list in getQuipSource; returning [] switches the feature off.
 // Item shape: { kind: 'joke' | 'tip', topic?: 'hosted-layers' | 'other' (tips), text, url?, linkText? }. Hosted-layer tips come first in the rotation (FB-20). A url is only used if it passes safeUrl (https, esri.com or arcgis.com).
 export type QuipTopic = 'hosted-layers' | 'other';
 export interface Quip { kind: 'joke' | 'tip'; topic?: QuipTopic; text: string; url?: string; linkText?: string }
 export interface TipState { readonly userPaused: boolean; readonly running: boolean; togglePause(): boolean; setHold(v: boolean): void; stop(): void }
 
-export const QUIPS: Quip[] = [
+const getQuipSource = (): Quip[] => [
   { kind: "tip", topic: "hosted-layers", text: "Hosted feature layers cost 2.4 credits per 10 MB a month, so a few big, quiet layers add up quickly.", url: "https://doc.arcgis.com/en/arcgis-online/administer/credits.htm", linkText: "How credits work" },
   { kind: "tip", topic: "other", text: "Files and attachments cost 1.2 credits per GB a month: far less per MB than feature storage.", url: "https://doc.arcgis.com/en/arcgis-online/administer/credits.htm", linkText: "How credits work" },
   { kind: "tip", topic: "hosted-layers", text: "Hosted views add no storage of their own, so they are a cheap way to share one layer several ways.", url: "https://doc.arcgis.com/en/arcgis-online/manage-data/create-hosted-views.htm", linkText: "About hosted views" },
@@ -26,6 +28,22 @@ export const QUIPS: Quip[] = [
   { kind: "joke", text: "Measuring storage. Unlike a coastline, this one has an end." },
   { kind: "joke", text: "Why is the hosted view so calm? It never needed its own storage plan." },
 ];
+
+const localizedQuips = (): Quip[] => {
+  let tip = 0, joke = 0;
+  return getQuipSource().map((q) => {
+    const n = q.kind === 'joke' ? ++joke : ++tip;
+    return { ...q, text: t(`scan.quip.${q.kind}${n}` as import('../../i18n/en').MessageKey), ...(q.linkText ? { linkText: t(`scan.quip.link${n}` as import('../../i18n/en').MessageKey) } : {}) };
+  });
+};
+
+export function QUIPS(): Quip[] { return getQuips(); }
+export function getQuips(): Quip[] { return localizedQuips(); }
+export { getQuipSource };
+export function localizedQuip(q: Quip): Quip {
+  const i = getQuipSource().findIndex((item) => item.text === q.text);
+  return i < 0 ? q : getQuips()[i] as Quip;
+}
 
 // DC-063 (docs/research/waiting-ux.md): the first line appears after 10 s so fast scans never show one; every line stays 12 s
 // (long enough to read it and decide on the link). QUIP_EVERY_LINK_MS is kept as the same value for callers that still read it.

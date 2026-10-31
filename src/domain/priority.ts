@@ -1,6 +1,7 @@
 // Tidy priority (ADR 0010). Pure TS: no DOM. Mirrors prototypes/d-converged/model.js; the tests mirror each other.
 import type { Row } from './types';
 import { agoDays, formatMB } from './format';
+import { getLocale, t, tn } from '../i18n';
 
 export type Priority = 'start' | 'look' | 'low';
 export type SortKey = 'priority' | 'credits' | 'updated' | 'views';
@@ -9,14 +10,14 @@ export type SortKey = 'priority' | 'credits' | 'updated' | 'views';
 export const IMPACT_FLOOR_CREDITS = 2.4;
 /** 1 MB: at or above this a family is never "Low impact" on size alone. */
 export const LOW_FLOOR_CREDITS = 0.24;
-export const PRIORITY_LABELS: Record<Priority, string> = { start: 'Quick win', look: 'Worth a look', low: 'Low impact' };
+export const PRIORITY_LABELS: Record<Priority, string> = { get start() { return t('domain.priority.start'); }, get look() { return t('domain.priority.look'); }, get low() { return t('domain.priority.low'); } };
 export const PRIORITY_RANK: Record<Priority, number> = { start: 0, look: 1, low: 2 };
 /** Dots shown next to the label (never colour alone). */
 export const PRIORITY_DOTS: Record<Priority, number> = { start: 3, look: 2, low: 1 };
 /** Narrow reach: only the owner, or groups. Anything else (org, public, unknown) is wide. */
 const NARROW = new Set(['private', 'shared']);
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const plural = (n: number) => tn(n === 1 ? 'review.reason.mapUses' : 'review.reason.mapsUse', n);
 
 /** Credits a family needs to count as high impact: top third of the stale set, or the 10 MB floor, whichever is lower. */
 export function impactCutoff(staleRows: Pick<Row, 'credits'>[]): number {
@@ -72,26 +73,32 @@ export function priorityOf(row: PriorityRow, staleRows: Pick<Row, 'credits'>[], 
   const access = row.source.access;
   const sizeKnown = row.sizeKnown ?? true;
   // An unmeasured size can't be called small or big: it stays Worth a look until it is measured (DC-053).
-  const size = sizeKnown ? formatMB(row.sizeMB) : 'size not measured yet';
-  if (lowBand) return { priority, reason: `${PRIORITY_LABELS.low}: only ${size}, so there is little to gain.` };
-  const reach = access === 'private' ? 'only its owner can see it' : access === 'shared' ? 'shared with groups only'
-    : access === 'public' ? 'shared publicly' : 'shared with the whole org';
-  const use = !depsKnown ? 'still checking maps and apps' : row.usedBy > 0 ? `${plural(row.usedBy, 'map or app uses', 'maps or apps use')} it`
-    : !useKnown ? 'its last use is unknown'
-    : row.noUseRecorded ? 'no use recorded since at least November 2022'
-    : row.lastUsedDaysAgo === null ? 'no data requests in the last year'
-    : `last used ${agoDays(row.lastUsedDaysAgo)}`;
-  return { priority, reason: `${PRIORITY_LABELS[priority]}: ${size}, ${reach}, and ${use}.` };
+  const size = sizeKnown ? formatMB(row.sizeMB) : t('domain.priority.sizeUnknown');
+  if (lowBand) return { priority, reason: t('domain.priority.lowReason', { label: PRIORITY_LABELS.low, size }) };
+  const reach = access === 'private' ? t('domain.priority.reach.private') : access === 'shared' ? t('domain.priority.reach.shared')
+    : access === 'public' ? t('domain.priority.reach.public') : t('domain.priority.reach.org');
+  const use = !depsKnown ? t('domain.priority.checking') : row.usedBy > 0 ? `${plural(row.usedBy)} it`
+    : !useKnown ? t('domain.priority.useUnknown')
+    : row.noUseRecorded ? t('domain.priority.noUse')
+    : row.lastUsedDaysAgo === null ? t('domain.priority.noRequests')
+    : t('domain.priority.lastUsed', { ago: agoDays(row.lastUsedDaysAgo) });
+  return { priority, reason: t('domain.priority.reason', { label: PRIORITY_LABELS[priority], size, reach, use }) };
 }
 
 type Sortable = Pick<Row, 'credits' | 'sizeMB' | 'daysSinceUpdate'> & { source: Pick<Row['source'], 'title'>; priority?: Priority; sizeKnown?: boolean; numViews?: number | null };
 
 const unknownLast = (a: Sortable, b: Sortable): number => Number(a.sizeKnown === false) - Number(b.sizeKnown === false);
-/** DC-100b: the default-locale collator, made once (a.localeCompare(b) makes one per call); the same order. */
-const COLLATOR = new Intl.Collator();
+/** Rebuild only when the selected locale changes. */
+let collatorLocale = '';
+let collator: Intl.Collator;
+function compareTitles(a: string, b: string): number {
+  const locale = getLocale();
+  if (locale !== collatorLocale) { collator = new Intl.Collator(locale); collatorLocale = locale; }
+  return collator.compare(a, b);
+}
 /** Most credits first; unmeasured sizes go last (DC-053). */
 export const byCredits = (a: Sortable, b: Sortable): number =>
-  unknownLast(a, b) || b.credits - a.credits || b.sizeMB - a.sizeMB || COLLATOR.compare(a.source.title, b.source.title);
+  unknownLast(a, b) || b.credits - a.credits || b.sizeMB - a.sizeMB || compareTitles(a.source.title, b.source.title);
 const rank = (r: Sortable) => PRIORITY_RANK[r.priority ?? 'low'];
 export const byPriority = (a: Sortable, b: Sortable): number => rank(a) - rank(b) || byCredits(a, b);
 const byUpdated = (a: Sortable, b: Sortable): number => b.daysSinceUpdate - a.daysSinceUpdate || byCredits(a, b);

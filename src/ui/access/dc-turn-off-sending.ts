@@ -6,9 +6,11 @@ import '@esri/calcite-components/dist/components/calcite-button';
 import '@esri/calcite-components/dist/components/calcite-dialog';
 import '@esri/calcite-components/dist/components/calcite-notice';
 import { TURN_OFF } from './turn-off-copy';
+import { LocaleController } from '../../i18n/controller';
 
 @customElement('dc-turn-off-sending')
 export class DcTurnOffSending extends LitElement {
+  private readonly _locale = new LocaleController(this);
   @property({ type: Boolean }) open = false;
   @property({ type: Boolean }) busy = false;
   /** A gentle message if it didn't work; the dialog stays open and the state is unchanged. */

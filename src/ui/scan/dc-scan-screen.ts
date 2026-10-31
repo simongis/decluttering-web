@@ -1,5 +1,7 @@
 import { LitElement, html, nothing, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { LocaleController } from '../../i18n/controller';
+import { t, tn } from '../../i18n';
 import '@esri/calcite-components/dist/components/calcite-panel';
 import '@esri/calcite-components/dist/components/calcite-block';
 import '@esri/calcite-components/dist/components/calcite-list';
@@ -34,11 +36,12 @@ import './dc-tips';
 
 export const REASSURANCE = 'Runs in your browser; nothing is sent to us. A copy stays in this browser for next time; clear it when you sign out.';
 
-const plural = (n: number, a: string, b: string) => `${fmtInt(n)} ${n === 1 ? a : b}`;
+
 const credit = (c: number) => (c < 10 ? c.toFixed(1) : fmtInt(c));
 
 @customElement('dc-scan-screen')
 export class DcScanScreen extends LitElement {
+  private readonly _locale = new LocaleController(this);
   @property() mode = 'admin';
   @property({ attribute: false }) orgName = '';
   @property({ attribute: false }) fullName = '';
@@ -111,17 +114,17 @@ export class DcScanScreen extends LitElement {
     const st = this.stages;
     const pct = this.flow === 'done' ? 100 : st?.percent ?? 0;
     const crawl = this.running ? crawlLine(st?.estimate) : null;
-    const line = this.flow === 'error' ? 'The scan didn’t finish.' : this.flow === 'done' ? currentLine(st && { ...st, finished: true }) : currentLine(st);
+    const line = this.flow === 'error' ? t('scan.progress.error') : this.flow === 'done' ? currentLine(st && { ...st, finished: true }) : currentLine(st);
     const a = scanActions(this.flow);
     return html`
       <div class="scan-progress" data-scan="progress">
         <div class="sp-main">
           <div class="sp-line" data-scan="detail">${line}</div>
           ${this.flow === 'error' ? nothing : html`
-            <div class="sp-bar" role="progressbar" aria-label="Scan progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow=${pct}>
+            <div class="sp-bar" role="progressbar" aria-label=${t('scan.progress.label')} aria-valuemin="0" aria-valuemax="100" aria-valuenow=${pct}>
               <i style="transform: scaleX(${pct / 100})"></i></div>
             <div class="sp-meta" data-scan="meta">
-              <span>${this.flow === 'stopped' ? `Stopped at ${pct}%` : `${pct}% done`}${this.running && this.eta ? ` · ${this.eta.text}` : ''}</span>
+              <span>${this.flow === 'stopped' ? t('scan.line.stopped-progress', { pct }) : t('scan.line.percent-done', { pct })}${this.running && this.eta ? ` · ${this.eta.text}` : ''}</span>
               ${crawl ? html`<span class="sp-crawl" data-scan="crawl">${crawl}</span>` : nothing}
             </div>`}
         </div>
@@ -143,20 +146,20 @@ export class DcScanScreen extends LitElement {
     const services = this.model.stats.found;
     const big = services >= 1000 || (maps ?? 0) >= 1000;
     const canReview = this.flow === 'background';
-    const what = maps ? `${plural(maps, 'map or app', 'maps and apps')} to look inside` : 'There’s a lot to look through';
+    const what = maps ? tn('scan.big.what-map', maps, { count: fmtInt(maps) }) : t('scan.big.what');
     const chosen = this.notify !== 'off';
     return html`
       <section class="big-org" data-scan="big-org" aria-labelledby="dc-big-org-h">
         <calcite-icon icon="clock" scale="m" aria-hidden="true"></calcite-icon>
         <div class="bo-body">
-          <h2 id="dc-big-org-h">${big ? 'This is a big organisation' : 'This one takes a little while'}</h2>
-          <p>${what}, so the first scan takes a while. If you stop, we pick up where we left off.</p>
-          <p class="bo-note">${canReview ? 'Review now and the rest fills in.' : 'Review opens once the basics are in.'}</p>
-          ${chosen ? html`<p class="bo-note" data-scan="notify-note">${notifyNote(this.notify)}</p>` : html`<p class="bo-note">You can leave this tab open and come back.</p>`}
+          <h2 id="dc-big-org-h">${t(big ? 'scan.big.organisation' : 'scan.big.takes-time')}</h2>
+          <p>${t('scan.big.first-scan', { what })}</p>
+          <p class="bo-note">${t(canReview ? 'scan.big.review-now' : 'scan.big.review-later')}</p>
+          ${chosen ? html`<p class="bo-note" data-scan="notify-note">${notifyNote(this.notify)}</p>` : html`<p class="bo-note">${t('scan.big.leave-tab')}</p>`}
           <div class="bo-actions">
-            <calcite-button data-action="big-review" ?disabled=${!canReview} icon-end="arrow-right" @click=${() => this.send('dc-scan-review')}>Review now</calcite-button>
-            <calcite-button data-action="keep-going" appearance="outline" @click=${() => { this.bigDismissed = true; }}>Keep going</calcite-button>
-            ${chosen ? nothing : html`<calcite-button data-action="tell-me" appearance="transparent" icon-start="bell" ?loading=${this.asking} @click=${() => void this.tellMe()}>Tell me when it’s done</calcite-button>`}
+            <calcite-button data-action="big-review" ?disabled=${!canReview} icon-end="arrow-right" @click=${() => this.send('dc-scan-review')}>${t('scan.flow.review-now')}</calcite-button>
+            <calcite-button data-action="keep-going" appearance="outline" @click=${() => { this.bigDismissed = true; }}>${t('scan.big.keep-going')}</calcite-button>
+            ${chosen ? nothing : html`<calcite-button data-action="tell-me" appearance="transparent" icon-start="bell" ?loading=${this.asking} @click=${() => void this.tellMe()}>${t('scan.big.tell-me')}</calcite-button>`}
           </div>
         </div>
       </section>`;
@@ -166,10 +169,10 @@ export class DcScanScreen extends LitElement {
     const m = this.model, s = m.stats;
     const checking = !this.depsKnown && this.flow !== 'done';
     const sub = m.exact
-      ? `${this.mode === 'my-items' ? plural(s.staleServices, 'layer looks', 'layers look') : plural(s.staleServices, 'service looks', 'services look')} stale${checking ? ' so far' : ''} · ${formatMB(s.sizeMB)}${checking ? ' · still checking maps and apps, so this may shift' : ''}`
-      : 'Waiting for the numbers…';
+      ? tn(`scan.credits.${this.mode === 'my-items' ? 'layer' : 'service'}-sub${checking ? '-checking' : ''}` as import('../../i18n/en').MessageKey, s.staleServices, { count: fmtInt(s.staleServices), size: formatMB(s.sizeMB) })
+      : t('scan.credits.waiting');
     return html`
-      <calcite-block heading="Credits you could save" description="Potential, per month" expanded data-scan="credits">
+      <calcite-block heading=${t('scan.credits.heading')} description=${t('scan.credits.description')} expanded data-scan="credits">
         <div class="block-pad" aria-live="off">
           <div class="big">${fmtInt(s.credits)}</div>
           <p class="big-sub">${sub}</p>
@@ -180,16 +183,16 @@ export class DcScanScreen extends LitElement {
   private renderStages() {
     const rows = stageRows(this.flow === 'done' && this.stages ? { ...this.stages, stages: this.stages.stages.map((s) => (s.state === 'working' || s.state === 'waiting' ? { ...s, state: 'done' as const } : s)) as ScanStages['stages'] } : this.stages, this.mode);
     return html`
-      <calcite-panel heading="What we’re up to" data-scan="phases">
-        <calcite-list interaction-mode="static" label="Scan stages">
+      <calcite-panel heading=${t('scan.stages.heading')} data-scan="phases">
+        <calcite-list interaction-mode="static" label=${t('scan.stages.label')}>
           ${rows.length ? rows.map((r) => html`
             <calcite-list-item label=${r.label} description=${[r.state === 'waiting' ? '' : r.count, r.detail].filter(Boolean).join(' · ')} data-phase=${r.id} data-state=${r.state}>
               <span slot="content-start">
                 ${r.state === 'working' && this.flow !== 'error'
-                  ? html`<calcite-loader inline label="Working"></calcite-loader>`
+                  ? html`<calcite-loader inline label=${t('scan.stages.working')}></calcite-loader>`
                   : html`<calcite-icon class="phase-icon ${r.state === 'done' ? 'done' : ''}" icon=${r.state === 'done' ? 'check-circle' : r.state === 'stopped' ? 'pause' : 'circle'} scale="s"></calcite-icon>`}
               </span>
-            </calcite-list-item>`) : html`<calcite-list-item label="Getting started" description="Asking ArcGIS Online what’s there"></calcite-list-item>`}
+            </calcite-list-item>`) : html`<calcite-list-item label=${t('scan.stages.starting')} description=${t('scan.stages.asking')}></calcite-list-item>`}
         </calcite-list>
       </calcite-panel>`;
   }
@@ -198,12 +201,12 @@ export class DcScanScreen extends LitElement {
     if (!this.tipsSeen || !this.running) return nothing;
     const st = this.stages;
     const cur = st?.current ? st.stages.find((s) => s.id === st.current) : undefined;
-    const sub = cur?.id === 'deps' && cur.total ? `While we check ${plural(cur.total, 'map or app', 'maps and apps')}` : 'While the scan carries on';
+    const sub = cur?.id === 'deps' && cur.total ? t('scan.wait.for-maps', { count: tn('scan.wait.map-count', cur.total, { count: fmtInt(cur.total) }) }) : t('scan.wait.on');
     return html`
       <section class="wait-card" data-scan="wait" aria-labelledby="dc-wait-h">
         <header>
           <calcite-icon icon="hourglass-active" scale="s" aria-hidden="true"></calcite-icon>
-          <h2 id="dc-wait-h">While you wait</h2>
+          <h2 id="dc-wait-h">${t('scan.wait.heading')}</h2>
           <span class="wc-sub">${sub}</span>
         </header>
         <dc-tips .showAfterMs=${0}></dc-tips>
@@ -217,12 +220,12 @@ export class DcScanScreen extends LitElement {
       ${this.error ? html`
         <div class="scan-error">
           <p role="alert" data-scan="error">${this.error}</p>
-          ${a.retry ? html`<calcite-button data-action="retry" @click=${() => this.send('dc-scan-retry')}>Try again</calcite-button>` : nothing}
+          ${a.retry ? html`<calcite-button data-action="retry" @click=${() => this.send('dc-scan-retry')}>${t('scan.error.try-again')}</calcite-button>` : nothing}
         </div>` : nothing}
       ${this.flow === 'done' ? html`
         <div class="note" data-note="scan-done">
           <calcite-icon icon="information" scale="s"></calcite-icon>
-          <div><strong>That is the lot</strong><span>${this.mode === 'my-items' ? plural(s.staleServices, 'layer looks', 'layers look') : plural(s.staleServices, 'service looks', 'services look')} stale, worth about ${credit(s.credits)} credits a month. Have a look?</span>
+          <div><strong>${t('scan.done.title')}</strong><span>${tn(this.mode === 'my-items' ? 'scan.done.layer-sentence' : 'scan.done.service-sentence', s.staleServices, { count: fmtInt(s.staleServices), credits: credit(s.credits) })}
             ${this.renderSince()}
             ${this.renderSweeps()}</div>
         </div>` : nothing}`;
@@ -252,10 +255,8 @@ export class DcScanScreen extends LitElement {
     return html`
       <section data-page="app" data-mode=${this.mode} data-flow=${this.flow} class="scan-page">
         <div>
-          <h1>${me ? 'Having a look at your hosted feature layers' : `Taking a look around ${this.orgName || 'your organisation'}`}</h1>
-          <p class="lede reassure">${this.fullName ? `Signed in as ${this.fullName}. ` : ''}${me
-            ? 'We’re only reading here. Nothing in your account gets changed, moved or deleted, and nothing leaves your browser.'
-            : 'We’re only reading here. Nothing in your org gets changed, moved or deleted, and nothing leaves it.'}</p>
+          <h1>${me ? t('scan.heading.my-items') : t('scan.heading.organisation', { organisation: this.orgName || 'your organisation' })}</h1>
+          <p class="lede reassure">${this.fullName ? t('scan.signed-in', { name: this.fullName }) : ''}${t(me ? 'scan.read-only.account' : 'scan.read-only.org')}</p>
         </div>
         ${this.aside}
         <p class="dc-sr" role="status" data-scan="announce">${this.announce()}</p>
@@ -263,12 +264,12 @@ export class DcScanScreen extends LitElement {
         ${this.renderAfter()}
         ${this.renderBigOrg()}
         <div class="scan-grid">
-          <calcite-panel heading=${me ? 'Every dot is one of your hosted feature layers' : 'Every dot is a hosted feature service'}
-            description=${n ? `${fmtInt(n)} of ${me ? 'yours' : 'them'}${exact ? ', to be exact' : ' so far'}` : 'Looking for them…'}>
+          <calcite-panel heading=${t(me ? 'scan.dotmap.heading.mine' : 'scan.dotmap.heading.org')}
+            description=${n ? tn(me ? 'scan.dotmap.count.yours' : 'scan.dotmap.count.them', n, { count: fmtInt(n), suffix: t(exact ? 'scan.dotmap.suffix.exact' : 'scan.dotmap.suffix.soFar') }) : t('scan.dotmap.searching')}>
             <div class="dots-wrap">
               <dc-dot-map .model=${this.model} .org=${this.org} ?finding=${this.stages?.current === 'find' && this.running}
                 ?live=${this.running} .expected=${servicesExpected(this.stages)} ?lenses-ready=${usageIn(this.stages) || !this.running}></dc-dot-map>
-              <p class="dm-foot"><calcite-icon icon="lock" scale="s"></calcite-icon><span>${REASSURANCE}</span></p>
+              <p class="dm-foot"><calcite-icon icon="lock" scale="s"></calcite-icon><span>${t('scan.reassurance')}</span></p>
             </div>
           </calcite-panel>
           <div class="side">

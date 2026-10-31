@@ -1,6 +1,8 @@
 import { LitElement, html, nothing } from 'lit';
 import type { PropertyValues } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
+import { LocaleController } from '../../i18n/controller';
+import { t } from '../../i18n';
 import '@esri/calcite-components/dist/components/calcite-list';
 import '@esri/calcite-components/dist/components/calcite-list-item';
 import '@esri/calcite-components/dist/components/calcite-checkbox';
@@ -26,6 +28,7 @@ const signOf = (r: Row): string =>
  */
 @customElement('dc-family-row')
 export class DcFamilyRow extends LitElement {
+  private readonly _locale = new LocaleController(this);
   @property({ attribute: false }) row!: Row;
   @property({ attribute: false }) org!: Pick<Org, 'urlKey'>;
   /** The "why" line, already worded for the viewer (see sayWhy). */
@@ -52,7 +55,7 @@ export class DcFamilyRow extends LitElement {
   }
 
   private link(s: Service) {
-    return html`<calcite-link href=${itemUrl(this.org, s)} target="_blank" rel="noopener" icon-end="launch" label="Open ${s.title} in ArcGIS Online">${s.title}</calcite-link>`;
+    return html`<calcite-link href=${itemUrl(this.org, s)} target="_blank" rel="noopener" icon-end="launch" label=${t('review.family.openItem', { title: s.title })}>${s.title}</calcite-link>`;
   }
 
   private emit(name: string, id: string, checked: boolean) {
@@ -63,9 +66,9 @@ export class DcFamilyRow extends LitElement {
   private cue(r: Row) {
     const id = `prio-${r.source.id}`;
     const n = PRIORITY_DOTS[r.priority];
-    return html`<span class="prio ${r.priority}" id=${id} tabindex="0" aria-label="${PRIORITY_LABELS[r.priority]}. ${r.priorityReason}">
+    return html`<span class="prio ${r.priority}" id=${id} tabindex="0" aria-label=${`${PRIORITY_LABELS[r.priority]}. ${r.priorityReason}`}>
       <span class="dots" aria-hidden="true">${[1, 2, 3].map((i) => html`<i class=${i <= n ? 'on' : ''}></i>`)}</span>${PRIORITY_LABELS[r.priority]}</span>
-      <calcite-tooltip reference-element=${id} placement="top" close-on-click>${r.priorityReason}</calcite-tooltip>`;
+      <calcite-tooltip reference-element=${id} placement="top" overlay-positioning="fixed" close-on-click>${r.priorityReason}</calcite-tooltip>`;
   }
 
   override render() {
@@ -78,7 +81,7 @@ export class DcFamilyRow extends LitElement {
       <calcite-list-item value=${s.id} data-id=${s.id} ?expanded=${r.views.length > 0} class=${cls}>
         <span slot="content-start" class="lead">
           ${this.selectable && !this.member
-            ? html`<calcite-checkbox label="Include ${s.title} in the digest" .checked=${this.on}
+            ? html`<calcite-checkbox label=${t('review.family.includeItem', { title: s.title })} .checked=${this.on}
                 @calciteCheckboxChange=${(e: Event) => this.emit('dc-item-toggle', s.id, (e.target as HTMLInputElement).checked)}></calcite-checkbox>` : nothing}
           <calcite-icon preload class="svc" icon="feature-layer" scale="s"></calcite-icon>
         </span>
@@ -88,19 +91,19 @@ export class DcFamilyRow extends LitElement {
           <span class="why">${this.why}</span>
           ${r.tidy ? html`<span class="tidy"><calcite-icon preload icon="lightbulb" scale="s"></calcite-icon>${r.tidy}</span>` : nothing}
           ${this.member ? html`<calcite-label layout="inline" class="mi-done"><calcite-checkbox .checked=${this.done}
-              @calciteCheckboxChange=${(e: Event) => this.emit('dc-done-toggle', s.id, (e.target as HTMLInputElement).checked)}></calcite-checkbox>Mark as done</calcite-label>` : nothing}
+              @calciteCheckboxChange=${(e: Event) => this.emit('dc-done-toggle', s.id, (e.target as HTMLInputElement).checked)}></calcite-checkbox>${t('review.family.markDone')}</calcite-label>` : nothing}
         </div>
         <div class="row-end">
           ${this.showUsage ? html`<dc-sparkline .weekly=${r.weekly}></dc-sparkline>` : nothing}
-          ${this.depsKnown && r.usedBy > 0 ? html`<calcite-chip class="c-risk" scale="s" appearance="solid" kind="neutral" icon="link" label="Tidy with care">Tidy with care</calcite-chip>` : nothing}
+          ${this.depsKnown && r.usedBy > 0 ? html`<calcite-chip class="c-risk" scale="s" appearance="solid" kind="neutral" icon="link" label=${t('review.family.tidyCare')}>${t('review.family.tidyCare')}</calcite-chip>` : nothing}
           <calcite-chip class="c-plain" scale="s" appearance="outline-fill" kind="neutral" data-size=${r.sizeKnown ? 'known' : 'unknown'} label=${saySize(r, this.stopped)}>${saySize(r, this.stopped)}</calcite-chip>
-          ${r.sizeKnown ? html`<calcite-chip class="c-reclaim" scale="s" appearance="outline-fill" kind="neutral" label=${sayCredits(r)} title=${sayCredits(r)}><i class="sw reclaim"></i>≈ ${credit(r.credits)} credits a month</calcite-chip>` : nothing}
+          ${r.sizeKnown ? html`<calcite-chip class="c-reclaim" scale="s" appearance="outline-fill" kind="neutral" label=${sayCredits(r)} title=${sayCredits(r)}><i class="sw reclaim"></i>≈ ${credit(r.credits)} ${t('review.fig.creditsMonth')}</calcite-chip>` : nothing}
           ${this.cue(r)}
         </div>
         </div>
         ${r.views.map((v) => html`<calcite-list-item value=${v.id}>
           <calcite-icon preload slot="content-start" class="svc" icon="feature-layer" scale="s"></calcite-icon>
-          <div slot="content" class="row-title">${this.link(v)}<span class="share">Shares storage with its source</span></div>
+          <div slot="content" class="row-title">${this.link(v)}<span class="share">${t('review.family.sharedStorage')}</span></div>
         </calcite-list-item>`)}
       </calcite-list-item>
     </calcite-list>`;

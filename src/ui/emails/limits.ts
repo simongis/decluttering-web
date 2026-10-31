@@ -1,6 +1,8 @@
 // DC-125d, ADR 0013 decision 7: the limits the app sets on sending. ArcGIS documents none, so these numbers are
 // deliberate, kept in one place, and tuned after real use. When in doubt the code sends fewer, never more. Pure.
 
+import { onLocaleChange, t } from '../../i18n';
+
 export const SEND_LIMITS = { perRun: 40, perDay: 100, gapMs: 2000 } as const;
 export interface Limits { perRun: number; perDay: number; gapMs: number }
 
@@ -16,13 +18,14 @@ export function effectiveLimits(demo: boolean, w: { __DC_DEMO_LIMITS__?: Partial
 
 /** The calm note when more owners are ticked than one run may send. */
 export const runCapNote = (perRun: number = SEND_LIMITS.perRun): string =>
-  `You can send to up to ${perRun} owners at a time. Send these, then start another run for the rest.`;
+  t('emails.limit.run', { count: perRun });
 /** The note when today's allowance is smaller than the run. */
 export const dayNote = (sentToday: number, remaining: number): string =>
-  `You’ve sent ${sentToday} today. ${remaining} more can go today; the rest tomorrow.`;
+  t('emails.limit.day', { sent: sentToday, remaining });
 /** Beside the disabled send button when today's allowance is used up. */
-export const dayFull = (perDay: number): string => `You’ve sent ${perDay} today, the most that can go in a day. More can go tomorrow.`;
-export const DAY_FULL = dayFull(SEND_LIMITS.perDay);
+export const dayFull = (perDay: number): string => t('emails.limit.full', { count: perDay });
+export let DAY_FULL = dayFull(SEND_LIMITS.perDay);
+onLocaleChange(() => { DAY_FULL = dayFull(SEND_LIMITS.perDay); });
 
 /** How many of these sends happened on `now`'s local day. Anything without a readable time is not counted. */
 export function countToday(sends: readonly { sentAt: string | Date }[], now: Date = new Date()): number {

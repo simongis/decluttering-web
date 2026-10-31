@@ -2,6 +2,8 @@
 // send a test to yourself, and only after an explicit confirm send real digests, one owner at a time, with pause,
 // resume and retry. Who may send what is decided in ./gate; digests are built in ./digest; the run is ./send-queue.
 // Light DOM, so the global Calcite and token styles apply (src/styles/emails.css).
+import { t, tn, tnParts } from '../../i18n';
+import { LocaleController } from '../../i18n/controller';
 import { noEmailLine, selectAll, selectionOf, selectNone, splitByEmail } from './select';
 import { sendErrorText, testToast } from './toast-copy';
 import { LitElement, html, nothing, type PropertyValues } from 'lit';
@@ -33,7 +35,7 @@ import {
   buildDigest, chipsToTokens, emailHtml, esc, fillSubject, firstName, outsideLinks, PH_LABEL, PLACEHOLDERS, TONES, tokensToChips, totalCredits,
   usedPlaceholders, type Admin, type EmailOrg, type EmailOwner, type PlaceholderKey, type ToneKey,
 } from './digest';
-import { nextSendStep, sendGate, SENDING_UNAVAILABLE, TEST_EACH_SESSION, type Gate, type SendStep } from './gate';
+import { nextSendStep, sendGate, type Gate, type SendStep } from './gate';
 import './dc-turn-on-sending';
 import { TURN_ON_NEXT } from './turn-on-copy';
 import { effectiveLimits, forgetPageSends, planSend, recordPageSend, sentTodayFor, type SendPlan } from './limits';
@@ -51,13 +53,11 @@ type SetupState = 'work' | 'done' | 'reuse';
 interface Toast { title: string; message: string; kind: 'success' | 'danger' }
 type Dialog = 'intro' | 'turn-on' | 'confirm' | 'tone' | 'link' | null;
 
-const PHASE_LABEL: Record<QueueItem['phase'], string> = {
-  waiting: 'Waiting its turn', sending: 'Adding, sending, removing from the group…', done: 'Sent and removed from the group',
-  failed: 'Didn’t go through', skipped: 'Left for another time', 'not-added': 'Couldn’t be added to the group, so nothing was sent',
-};
+const phaseLabel = (phase: QueueItem['phase']): string => t(({ waiting: 'emails.run.waiting', sending: 'emails.run.sending', done: 'emails.run.done', failed: 'emails.run.failed', skipped: 'emails.run.skipped', 'not-added': 'emails.run.not.added' } as const)[phase]);
 
 @customElement('dc-emails')
 export class DcEmails extends LitElement {
+  private readonly _locale = new LocaleController(this);
   /** Every owner on the review's list; `rows` holds only their ticked items (none: shown, but can't be sent to). */
   @property({ attribute: false }) owners: EmailOwner[] = [];
   @property({ attribute: false }) admin: Admin = { name: '', username: '' };
@@ -173,7 +173,7 @@ export class DcEmails extends LitElement {
       if (n !== this.notifier) return;
       this.canCreate = false;
       this.missing = '';
-      this.showToast('We couldn’t check your role', e instanceof Error ? e.message : String(e), 'danger');
+      this.showToast(t('emails.notice.role'), e instanceof Error ? e.message : String(e), 'danger');
     }
   }
 
@@ -221,7 +221,7 @@ export class DcEmails extends LitElement {
     document.execCommand('insertText', false, e.clipboardData?.getData('text/plain') ?? '');
   };
   private insertPlaceholder(k: PlaceholderKey): void {
-    this.exec('insertHTML', `<span class="ph" contenteditable="false" data-ph="${k}" title="Filled in for each owner">${esc(PH_LABEL[k])}</span>&nbsp;`);
+    this.exec('insertHTML', `<span class="ph" contenteditable="false" data-ph="${k}" title=${t('emails.placeholder.title')}>${esc(PH_LABEL[k])}</span>&nbsp;`);
   }
   private addLink = (): void => {
     const input = this.querySelector<HTMLInputElement>('#em-link-url');
@@ -312,9 +312,9 @@ export class DcEmails extends LitElement {
     try {
       await this.ensureGroup();
       this.requestUpdate();
-      this.showToast('Sending is on for you', TURN_ON_NEXT);
+      this.showToast(t('emails.notice.sending.on'), TURN_ON_NEXT);
     } catch (err) {
-      this.showToast('We couldn’t turn sending on', sendErrorText(err), 'danger');
+      this.showToast(t('emails.notice.sending.error'), sendErrorText(err), 'danger');
     } finally {
       this.testBusy = false;
     }
@@ -325,7 +325,7 @@ export class DcEmails extends LitElement {
     this.testBusy = true;
     try {
       // The test never creates the group for a real admin: turning sending on is its own, deliberate step (ADR 0013).
-      if (!n.group && !this.demo) throw new Error('Turn on sending first.');
+      if (!n.group && !this.demo) throw new Error(t('emails.test.off.first'));
       await this.ensureGroup();
       const d = buildDigest(o, this.template, this.ctx, { test: true });
       await n.sendTest(d.subject, d.html); // to the signed-in admin only; there is no way to name anyone else
@@ -333,10 +333,10 @@ export class DcEmails extends LitElement {
       // ArcGIS accepted it (a failure threw above and never gets here): tell the host, which unlocks owner sends for this session.
       const first = !this.demo && !this.ownerSendsUnlocked;
       this.dispatchEvent(new CustomEvent('dc-emails-test-sent', { bubbles: true, composed: true }));
-      const t = testToast(this.admin.email, firstName(o.fullName), { unlocked: first });
-      this.showToast(t.title, t.message);
+      const toast = testToast(this.admin.email, firstName(o.fullName), { unlocked: first });
+      this.showToast(toast.title, toast.message);
     } catch (err) {
-      this.showToast('The test didn’t go through', sendErrorText(err), 'danger');
+      this.showToast(t('emails.notice.test.error'), sendErrorText(err), 'danger');
     } finally {
       this.testBusy = false;
     }
@@ -401,13 +401,13 @@ export class DcEmails extends LitElement {
       this.snap = q.snapshot();
       if (ev.type === 'state' && this.snap.halted) {
         const left = this.snap.items.filter((x) => x.phase === 'waiting').length;
-        this.live = `ArcGIS Online stopped this run: ${this.snap.halted.message}. ${this.snap.sent} sent, ${left} still to go.`;
+        this.live = t('emails.live.stopped', { message: this.snap.halted.message, sent: this.snap.sent, left });
       }
       if (ev.type !== 'phase') return;
       const i = this.snap.items.findIndex((x) => x.username === ev.item.username) + 1;
       const who = ev.item.fullName;
-      if (ev.item.phase === 'sending') this.live = `Sending to ${who}, ${i} of ${total}.`;
-      else if (ev.item.phase === 'done') this.live = `Sent to ${who}. ${this.snap.sent} of ${total} sent.`;
+      if (ev.item.phase === 'sending') this.live = t('emails.live.sending', { name: who, index: i, total });
+      else if (ev.item.phase === 'done') this.live = t('emails.live.sent', { name: who, sent: this.snap.sent, total });
       else if (ev.item.phase === 'failed' || ev.item.phase === 'not-added') this.live = `${who}: didn’t go through. ${ev.item.error}`;
     }, { gapMs: this.limits.gapMs });
     this.queue = q;
@@ -418,12 +418,12 @@ export class DcEmails extends LitElement {
     this.tidy = null;
     this.lifeChoice = 'keep';
     this.logged = 0; this.logWarn = ''; this.logSetup = null;
-    this.live = this.mode === 'one' ? 'One owner at a time. Nothing goes out until you press Send on an owner.' : `Sending ${plural(total, 'digest', 'digests')}, one owner at a time.`;
+    this.live = this.mode === 'one' ? t('emails.live.one.mode') : t(total === 1 ? 'emails.live.all.mode.one' : 'emails.live.all.mode.other', { count: total });
     try {
       await this.ensureGroup();
       if (this.logOn) await this.ensureLog();
     } catch (err) {
-      this.showToast('Setup didn’t finish', sendErrorText(err), 'danger');
+      this.showToast(t('emails.notice.setup.error'), sendErrorText(err), 'danger');
       this.queue = null; this.snap = null; this.step = 'compose';
       return;
     }
@@ -456,7 +456,7 @@ export class DcEmails extends LitElement {
       setNudgeLog(this.orgId, withSend(getNudgeLog(this.orgId), username, at));
       return true;
     } catch (e) {
-      this.logWarn = `The email went, but the nudge log didn't take a note of it (${e instanceof Error ? e.message : String(e)}). Next time we may not flag who you nudged.`;
+      this.logWarn = t('emails.log.failed', { error: e instanceof Error ? e.message : String(e) });
       return false;
     }
   }
@@ -479,7 +479,7 @@ export class DcEmails extends LitElement {
       this.tidy = { line: tidyLine(r), warn: tidyWarning(r) };
       if (this.tidy.line) this.live = this.tidy.line;
     } catch (e) {
-      this.tidy = { line: null, warn: `The group couldn't be tidied first (${e instanceof Error ? e.message : String(e)}). Nobody in it is emailed unless they're in this run.` };
+      this.tidy = { line: null, warn: t('emails.tidy.failed', { error: e instanceof Error ? e.message : String(e) }) };
     }
   }
   private afterRun(): void {
@@ -495,14 +495,14 @@ export class DcEmails extends LitElement {
     const done = new Set(this.snap?.items.filter((i) => i.phase === 'done').map((i) => i.username) ?? []);
     if (done.size) this.ticked = new Set([...this.ticked].filter((u) => !done.has(u)));
     void this.readBack();
-    this.live = sent ? `All done. ${plural(sent, 'owner has', 'owners have')} their email.` : 'Nothing was sent.';
+    this.live = sent ? t(sent === 1 ? 'emails.live.done.one' : 'emails.live.done.other', { count: sent }) : t('emails.live.nothing');
     requestAnimationFrame(() => this.querySelector<HTMLElement & { setFocus?: () => void }>('#done-back')?.setFocus?.());
   }
   private togglePause = async (): Promise<void> => {
     const q = this.queue;
     if (!q) return;
-    if (q.snapshot().paused) { this.live = 'Resumed.'; await q.resume(); this.afterRun(); }
-    else { q.pause(); this.live = 'Paused. Nothing further goes out until you resume.'; }
+    if (q.snapshot().paused) { this.live = t('emails.live.resumed'); await q.resume(); this.afterRun(); }
+    else { q.pause(); this.live = t('emails.live.paused'); }
   };
   private retry = async (u: string): Promise<void> => {
     const q = this.queue;
@@ -514,7 +514,7 @@ export class DcEmails extends LitElement {
   private resumeAfterStop = async (): Promise<void> => {
     const q = this.queue;
     if (!q || q.snapshot().running) return;
-    this.live = 'Carrying on from the next owner.';
+    this.live = t('emails.live.carry');
     await q.resume();
     this.afterRun();
   };
@@ -542,10 +542,10 @@ export class DcEmails extends LitElement {
     try {
       await n.deleteGroup();
       this.groupRemoved = 'yes';
-      this.live = 'The hidden group was removed.';
+      this.live = t('emails.group.removed');
     } catch (e) {
       this.groupRemoved = 'no';
-      this.showToast('The group wasn’t removed', e instanceof Error ? e.message : String(e), 'danger');
+      this.showToast(t('emails.notice.group.remove'), e instanceof Error ? e.message : String(e), 'danger');
     }
   }
 
@@ -558,25 +558,25 @@ export class DcEmails extends LitElement {
 
   /* ------------------------------------------------------------ rendering */
   private whyOff(o: EmailOwner): { icon: string; text: string } | null {
-    if (this.noEmail.has(o.username)) return { icon: 'email-address', text: 'No email on file' };
+    if (this.noEmail.has(o.username)) return { icon: 'email-address', text: t('emails.no.email') };
     if (o.rows.length) return null;
-    if (o.nudgedRecently) return { icon: 'clock', text: `Nudged ${agoText(o.nudgedDaysAgo)}, so resting for now. Tick their items on the review to include them.` };
-    return { icon: 'information', text: 'No items ticked on the review step.' };
+    if (o.nudgedRecently) return { icon: 'clock', text: t('emails.nudged', { ago: agoText(o.nudgedDaysAgo) }) };
+    return { icon: 'information', text: t('emails.no.items') };
   }
 
   private renderOwners() {
     const sel = selectionOf(this.sendable.map((o) => o.username), this.ticked), locked = this.step !== 'compose';
     return html`<div class="em-selectbar" data-select-bar style="display:flex;align-items:center;gap:0.25rem;padding:0.25rem 0.5rem;flex-wrap:wrap;">
       <calcite-button data-action="select-all" scale="s" appearance="transparent" kind="neutral" ?disabled=${locked || sel.state === 'all' || !sel.total}
-        @click=${() => { this.ticked = selectAll(this.sendable.map((o) => o.username)); }}>Select all</calcite-button>
+        @click=${() => { this.ticked = selectAll(this.sendable.map((o) => o.username)); }}>${t('emails.select.all')}</calcite-button>
       <calcite-button data-action="select-none" scale="s" appearance="transparent" kind="neutral" ?disabled=${locked || sel.state === 'none'}
-        @click=${() => { this.ticked = selectNone(); }}>Select none</calcite-button>
+        @click=${() => { this.ticked = selectNone(); }}>${t('emails.select.none')}</calcite-button>
       <small class="muted" data-select-count role="status" aria-live="polite">${sel.label}</small>
     </div>
-    <ul class="em-owner-list" aria-label="Owners">${this.owners.map((o) => {
+    <ul class="em-owner-list" aria-label=${t('emails.owners')}>${this.owners.map((o) => {
       const why = this.whyOff(o), on = !why && this.ticked.has(o.username), selected = o.username === this.previewOwner?.username;
       return html`<li class="em-owner ${selected ? 'sel' : ''} ${on ? '' : 'off'} ${why ? 'dis' : ''}" data-owner=${o.username}>
-        <calcite-checkbox label="Send ${o.fullName} a digest" ?checked=${on} ?disabled=${!!why || this.step !== 'compose'}
+        <calcite-checkbox label=${t('emails.select.owner.aria', { name: o.fullName })} ?checked=${on} ?disabled=${!!why || this.step !== 'compose'}
           @calciteCheckboxChange=${(e: Event) => {
             const next = new Set(this.ticked);
             if ((e.target as HTMLInputElement).checked) next.add(o.username); else next.delete(o.username);
@@ -584,7 +584,7 @@ export class DcEmails extends LitElement {
           }}></calcite-checkbox>
         <button type="button" class="em-pick" aria-pressed=${selected ? 'true' : 'false'} ?disabled=${!!why}
           @click=${() => { this.sel = o.username; }}>
-          <span class="em-oid"><b>${o.fullName}</b><small>${o.rows.length ? `${plural(o.rows.length, 'item', 'items')} · ≈ ${credit(totalCredits(o.rows))} credits a month` : 'Nothing ticked'}</small>
+          <span class="em-oid"><b>${o.fullName}</b><small>${o.rows.length ? `${plural(o.rows.length, 'item', 'items')} · ≈ ${credit(totalCredits(o.rows))} ${t('emails.credits.month')}` : t('emails.owner.nothing.ticked')}</small>
           ${why ? html`<span class="em-why"><calcite-icon icon=${why.icon} scale="s" aria-hidden="true"></calcite-icon>${why.text}</span>` : nothing}</span>
         </button>
       </li>`;
@@ -592,12 +592,12 @@ export class DcEmails extends LitElement {
   }
 
   private inbox(o: EmailOwner) {
-    const from = this.admin.email ? `<${this.admin.email}>` : '(you)';
+    const from = this.admin.email ? `<${this.admin.email}>` : `(${t('emails.preview.you')})`;
     return html`<div class="inbox">
       <div class="inbox-meta">
         <div class="inbox-subj" data-preview="subject">${fillSubject(this.subject, o, this.ctx)}</div>
         <div class="inbox-line"><calcite-avatar scale="s" full-name=${this.admin.name} username=${this.admin.username}></calcite-avatar>
-          <span><b>${this.admin.name}</b> <span class="muted">${from}</span><br><span class="muted small">to ${o.fullName}${o.email ? ` <${o.email}>` : ''}</span></span></div>
+          <span><b>${this.admin.name}</b> <span class="muted">${from}</span><br><span class="muted small">${t('emails.preview.to')} ${o.fullName}${o.email ? ` <${o.email}>` : ''}</span></span></div>
       </div>
       <div class="inbox-body" data-preview="body">${unsafeHTML(emailHtml(this.tpl, o, this.ctx))}</div>
     </div>`;
@@ -607,47 +607,47 @@ export class DcEmails extends LitElement {
     const used = usedPlaceholders(this.tpl);
     const outside = outsideLinks(this.tpl);
     return html`<div class="em-edit-body">
-      <calcite-segmented-control id="em-tone" width="full" scale="m" label="Tone" @calciteSegmentedControlChange=${this.onTone}>
+      <calcite-segmented-control id="em-tone" width="full" scale="m" label=${t('emails.tone')} @calciteSegmentedControlChange=${this.onTone}>
         ${(Object.keys(TONES) as ToneKey[]).map((k) => html`<calcite-segmented-control-item value=${k} ?checked=${k === this.tone}>${TONES[k].label}</calcite-segmented-control-item>`)}
       </calcite-segmented-control>
-      <calcite-label>Subject<calcite-input id="em-subject" scale="s" label="Subject" .value=${this.subject}
+      <calcite-label>${t('emails.subject')}<calcite-input id="em-subject" scale="s" label=${t('emails.subject')} .value=${this.subject}
         @calciteInputInput=${(e: Event) => { this.subject = (e.target as HTMLInputElement).value; draft.subject = this.subject; draft.dirty = true; }}></calcite-input></calcite-label>
-      <div class="em-tools" role="toolbar" aria-label="Formatting" @mousedown=${(e: Event) => e.preventDefault()}>
-        <calcite-button scale="s" appearance="outline-fill" kind="neutral" label="Bold" @click=${() => this.exec('bold')}><b>B</b></calcite-button>
-        <calcite-button scale="s" appearance="outline-fill" kind="neutral" label="Italic" @click=${() => this.exec('italic')}><i>I</i></calcite-button>
-        <calcite-button scale="s" appearance="outline-fill" kind="neutral" icon-start="link" label="Link" @click=${(e: Event) => { this.remember(); this.openDialog('link', e.currentTarget); }}></calcite-button>
-        <calcite-button scale="s" appearance="outline-fill" kind="neutral" label="Bullet list" @click=${() => this.exec('insertUnorderedList')}>&bull; List</calcite-button>
+      <div class="em-tools" role="toolbar" aria-label=${t('emails.format')} @mousedown=${(e: Event) => e.preventDefault()}>
+        <calcite-button scale="s" appearance="outline-fill" kind="neutral" label=${t('emails.bold')} @click=${() => this.exec('bold')}><b>B</b></calcite-button>
+        <calcite-button scale="s" appearance="outline-fill" kind="neutral" label=${t('emails.italic')} @click=${() => this.exec('italic')}><i>I</i></calcite-button>
+        <calcite-button scale="s" appearance="outline-fill" kind="neutral" icon-start="link" label=${t('emails.link')} @click=${(e: Event) => { this.remember(); this.openDialog('link', e.currentTarget); }}></calcite-button>
+        <calcite-button scale="s" appearance="outline-fill" kind="neutral" label=${t('emails.bullets')} @click=${() => this.exec('insertUnorderedList')}>&bull; ${t('emails.editor.bullets.text')}</calcite-button>
       </div>
-      <div class="em-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Email template" spellcheck="true"
+      <div class="em-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label=${t('emails.template.aria')} spellcheck="true"
         @input=${this.readEditor} @paste=${this.onPaste} @keyup=${this.remember} @mouseup=${this.remember} @focusout=${this.remember}></div>
-      <div class="em-chips" @mousedown=${(e: Event) => e.preventDefault()}><span class="muted small">Add a placeholder:</span>
+      <div class="em-chips" @mousedown=${(e: Event) => e.preventDefault()}><span class="muted small">${t('emails.placeholder.add')}</span>
         ${PLACEHOLDERS.map(([k, l]) => html`<calcite-button data-ph=${k} scale="s" appearance="outline" kind="brand" icon-start="plus" @click=${() => this.insertPlaceholder(k)}>${l}</calcite-button>`)}
       </div>
-      ${used.includes('itemList') ? nothing : html`<calcite-notice open scale="s" kind="warning" icon="exclamation-mark-triangle"><div slot="message">The template has no item list, so owners won't see which items you mean. Add the “Item list” placeholder.</div></calcite-notice>`}
-      ${outside.length ? html`<calcite-notice open scale="s" kind="warning" icon="link"><div slot="message">ArcGIS Online may refuse to send links it can't check, such as ${outside[0]}. Links to your org's own items are fine.</div></calcite-notice>` : nothing}
+      ${used.includes('itemList') ? nothing : html`<calcite-notice open scale="s" kind="warning" icon="exclamation-mark-triangle"><div slot="message">${t('emails.warning.no.items')}</div></calcite-notice>`}
+      ${outside.length ? html`<calcite-notice open scale="s" kind="warning" icon="link"><div slot="message">${t('emails.warning.link', { url: outside[0] })}</div></calcite-notice>` : nothing}
     </div>`;
   }
 
   private setupRow() {
     if (!this.setup) return nothing;
-    const t = this.tidy;
-    const tidyRows = t ? html`${t.line ? html`<div class="em-setup done" data-tidy="done" role="status"><calcite-icon icon="group" scale="s" aria-hidden="true"></calcite-icon><span>${t.line}</span><calcite-icon class="ok" icon="check-circle" scale="s" aria-hidden="true"></calcite-icon></div>` : nothing}
-      ${t.warn ? html`<div class="em-setup em-warn" data-tidy="warn" role="alert"><calcite-icon icon="exclamation-mark-triangle" scale="s" aria-hidden="true"></calcite-icon><span>${t.warn}</span></div>` : nothing}` : nothing;
-    const text = this.setup === 'work' ? `Creating the hidden group “${GROUP_TITLE}”…`
-      : this.setup === 'done' ? `Created the hidden group “${GROUP_TITLE}”. Hidden and invitation-only; only you can see it.`
-      : `Using the hidden group “${GROUP_TITLE}” again. Only you can see it.`;
+    const tidy = this.tidy;
+    const tidyRows = tidy ? html`${tidy.line ? html`<div class="em-setup done" data-tidy="done" role="status"><calcite-icon icon="group" scale="s" aria-hidden="true"></calcite-icon><span>${tidy.line}</span><calcite-icon class="ok" icon="check-circle" scale="s" aria-hidden="true"></calcite-icon></div>` : nothing}
+      ${tidy.warn ? html`<div class="em-setup em-warn" data-tidy="warn" role="alert"><calcite-icon icon="exclamation-mark-triangle" scale="s" aria-hidden="true"></calcite-icon><span>${tidy.warn}</span></div>` : nothing}` : nothing;
+    const text = this.setup === 'work' ? t('emails.group.creating', { title: GROUP_TITLE })
+      : this.setup === 'done' ? t('emails.group.created', { title: GROUP_TITLE })
+      : t('emails.group.reuse', { title: GROUP_TITLE });
     return html`${tidyRows}<div class="em-setup ${this.setup}" data-setup=${this.setup}><calcite-icon icon="group" scale="s" aria-hidden="true"></calcite-icon><span>${text}</span>
-      ${this.setup === 'work' ? html`<calcite-loader inline label="Working"></calcite-loader>` : html`<calcite-icon class="ok" icon="check-circle" scale="s" aria-hidden="true"></calcite-icon>`}</div>${this.logRow()}`;
+      ${this.setup === 'work' ? html`<calcite-loader inline label=${t('emails.working')}></calcite-loader>` : html`<calcite-icon class="ok" icon="check-circle" scale="s" aria-hidden="true"></calcite-icon>`}</div>${this.logRow()}`;
   }
 
   /** DC-017: the nudge log's status while a run is set up, and a warning if a row didn't go in. */
   private logRow() {
     const s = this.logSetup;
-    const text = s === 'work' ? `Creating your private nudge log “${LOG_TITLE}”…`
-      : s === 'done' ? `Created your private nudge log “${LOG_TITLE}”. Only you can see it.`
-      : `Adding to your private nudge log “${LOG_TITLE}”.`;
+    const text = s === 'work' ? t('emails.log.creating', { title: LOG_TITLE })
+      : s === 'done' ? t('emails.log.created', { title: LOG_TITLE })
+      : t('emails.log.adding', { title: LOG_TITLE });
     return html`${s ? html`<div class="em-setup ${s}" data-log-setup=${s}><calcite-icon icon="table" scale="s" aria-hidden="true"></calcite-icon><span>${text}</span>
-      ${s === 'work' ? html`<calcite-loader inline label="Working"></calcite-loader>` : html`<calcite-icon class="ok" icon="check-circle" scale="s" aria-hidden="true"></calcite-icon>`}</div>` : nothing}
+      ${s === 'work' ? html`<calcite-loader inline label=${t('emails.working')}></calcite-loader>` : html`<calcite-icon class="ok" icon="check-circle" scale="s" aria-hidden="true"></calcite-icon>`}</div>` : nothing}
       ${this.logWarn ? html`<div class="em-setup em-warn" data-log="warn" role="alert"><calcite-icon icon="exclamation-mark-triangle" scale="s" aria-hidden="true"></calcite-icon><span>${this.logWarn}</span></div>` : nothing}`;
   }
 
@@ -656,10 +656,11 @@ export class DcEmails extends LitElement {
     const items = n.reduce((s, o) => s + o.rows.length, 0);
     // DC-125d: the button says how many go now (the limits can be fewer than the ticked count).
     const goN = n.length ? plan.go : 0;
-    const realLabel = this.mode === 'one' ? `Go through ${plural(goN, 'owner', 'owners')} one by one` : `Send to ${plural(goN, 'owner', 'owners')}`;
-    const blockNote = g.test.reason === 'read-only' ? SENDING_UNAVAILABLE
-      : g.test.reason === 'not-opted-in' ? 'Sending is off for you. Turn it on when you’re ready; nothing is sent until you choose. You can still write and preview every email.'
-      : g.test.reason === 'no-privilege' ? `${g.test.message} Ask an administrator to add it to your role. You can still write and preview every email here.`
+    const ownersLabel = plural(goN, 'owner', 'owners');
+    const realLabel = t(this.mode === 'one' ? 'emails.button.go.through' : 'emails.button.send.to', { owners: ownersLabel });
+    const blockNote = g.test.reason === 'read-only' ? t('emails.gate.unavailable')
+      : g.test.reason === 'not-opted-in' ? t('emails.note.opted.off')
+      : g.test.reason === 'no-privilege' ? t('emails.note.privilege', { message: g.test.message ?? '' })
       : g.test.reason === 'no-email' ? g.test.message ?? null
       : null;
     // DC-125b: opted in, test possible, owner sends still locked: the test is the next step, so it gets the highlight.
@@ -669,21 +670,21 @@ export class DcEmails extends LitElement {
       ${blockNote ? html`<div class="em-setup em-warn" role="note" data-note=${g.test.reason!}><calcite-icon icon="lock" scale="s" aria-hidden="true"></calcite-icon><span>${blockNote}</span></div>` : nothing}
       ${n.length && plan.notes.length ? html`<div class="em-setup" role="note" data-note="send-limit"><calcite-icon icon="information" scale="s" aria-hidden="true"></calcite-icon><span>${plan.notes.join(' ')}</span></div>` : nothing}
       <div class="em-bar-row">
-        <div class="em-bar-sum"><b data-bar-main>${n.length ? `${plural(n.length, 'owner', 'owners')} · ${plural(items, 'item', 'items')}` : 'No one ticked yet'}</b>
-          <span>${this.testSentAt ? 'Your test has been sent. Check your inbox.' : 'Send yourself a test first. It only goes to you.'}</span>
-          ${testNext && !this.testSentAt ? html`<span class="em-bar-note" data-note="test-each-session"><calcite-icon icon="information" scale="s" aria-hidden="true"></calcite-icon>${TEST_EACH_SESSION}</span>` : nothing}
-          ${this.demo ? html`<span class="em-bar-note"><calcite-icon icon="information" scale="s" aria-hidden="true"></calcite-icon>Demo: nothing is really sent.</span>`
-            : html`<span class="em-bar-note"><calcite-icon icon="lock" scale="s" aria-hidden="true"></calcite-icon>Sent from your own ArcGIS Online org, from this browser. Nothing goes through us.</span>`}</div>
+        <div class="em-bar-sum"><b data-bar-main>${n.length ? `${plural(n.length, 'owner', 'owners')} · ${plural(items, 'item', 'items')}` : t('emails.no.one.ticked')}</b>
+          <span>${this.testSentAt ? t('emails.note.test.sent') : t('emails.note.test.first')}</span>
+          ${testNext && !this.testSentAt ? html`<span class="em-bar-note" data-note="test-each-session"><calcite-icon icon="information" scale="s" aria-hidden="true"></calcite-icon>${t('emails.gate.test.session')}</span>` : nothing}
+          ${this.demo ? html`<span class="em-bar-note"><calcite-icon icon="information" scale="s" aria-hidden="true"></calcite-icon>${t('emails.note.demo')}</span>`
+            : html`<span class="em-bar-note"><calcite-icon icon="lock" scale="s" aria-hidden="true"></calcite-icon>${t('emails.note.own.org')}</span>`}</div>
         <div class="em-bar-act">
-          <calcite-segmented-control id="em-mode" scale="s" label="How to send" @calciteSegmentedControlChange=${(e: Event) => { this.mode = (e.target as HTMLInputElement).value as 'all' | 'one'; }}>
-            <calcite-segmented-control-item value="all" ?checked=${this.mode === 'all'}>All at once</calcite-segmented-control-item>
-            <calcite-segmented-control-item value="one" ?checked=${this.mode === 'one'}>One at a time</calcite-segmented-control-item>
+          <calcite-segmented-control id="em-mode" scale="s" label=${t('emails.mode.send.label')} @calciteSegmentedControlChange=${(e: Event) => { this.mode = (e.target as HTMLInputElement).value as 'all' | 'one'; }}>
+            <calcite-segmented-control-item value="all" ?checked=${this.mode === 'all'}>${t('emails.mode.all')}</calcite-segmented-control-item>
+            <calcite-segmented-control-item value="one" ?checked=${this.mode === 'one'}>${t('emails.mode.one')}</calcite-segmented-control-item>
           </calcite-segmented-control>
           ${g.test.reason === 'not-opted-in'
             ? html`<calcite-button data-action="turn-on" appearance="outline" kind="brand" icon-start="group" ?disabled=${this.testBusy} ?loading=${this.testBusy}
-                @click=${this.onTurnOn}>Turn on sending</calcite-button>`
+                @click=${this.onTurnOn}>${t('emails.button.turn.on')}</calcite-button>`
             : html`<calcite-button data-action="test" appearance=${testNext ? 'solid' : 'outline'} data-next=${testNext ? 'true' : nothing} kind="brand" icon-start="email-address" ?disabled=${!g.test.ok || !this.previewOwner} ?loading=${this.testBusy}
-                @click=${this.onTest}>Send a test to me</calcite-button>`}
+                @click=${this.onTest}>${t('emails.button.test')}</calcite-button>`}
           <span class="em-real-wrap">
             <calcite-button data-action="send" icon-start="envelope" ?disabled=${!g.owners.ok} title=${g.owners.ok ? '' : g.owners.message ?? ''} aria-description=${g.owners.ok ? nothing : g.owners.message ?? nothing} @click=${this.onReal}>${realLabel}</calcite-button>
             ${g.owners.reason === 'test-first' ? html`<small class="em-off" data-note="test-first">${g.owners.message}</small>` : nothing}
@@ -696,18 +697,18 @@ export class DcEmails extends LitElement {
   private renderCompose() {
     const o = this.previewOwner;
     return html`<div class="em-head">
-        <div><h1 id="email-h" tabindex="-1">Write the emails</h1>
-        <p class="lede">One digest per owner. Nothing leaves your browser until you send.</p></div>
+        <div><h1 id="email-h" tabindex="-1">${t('emails.heading')}</h1>
+        <p class="lede">${t('emails.lede')}</p></div>
         <div class="em-head-act">
-          <calcite-action icon="information" text="Before you send" text-enabled scale="s" appearance="transparent" @click=${(e: Event) => this.openDialog('intro', e.currentTarget)}></calcite-action>
-          <calcite-button data-action="emails-back" appearance="transparent" kind="neutral" icon-start="arrow-left" scale="s" @click=${this.back}>Back to review</calcite-button>
+          <calcite-action icon="information" text=${t('emails.action.before')} text-enabled scale="s" appearance="transparent" @click=${(e: Event) => this.openDialog('intro', e.currentTarget)}></calcite-action>
+          <calcite-button data-action="emails-back" appearance="transparent" kind="neutral" icon-start="arrow-left" scale="s" @click=${this.back}>${t('emails.back.review')}</calcite-button>
         </div>
       </div>
       <div class="em-grid">
-        <calcite-panel heading="Who gets one" class="em-owners">${this.renderOwners()}</calcite-panel>
-        <calcite-panel heading="The template" description="Edit once; it's filled in for each owner." class="em-edit">${this.renderEditor()}</calcite-panel>
-        <calcite-panel heading="Preview" description=${o ? `${o.fullName}'s email, with only their ticked items` : 'How it lands in an inbox'} class="em-prev">
-          <div class="em-prev-body">${o ? this.inbox(o) : html`<p class="muted">Tick an owner to see their email.</p>`}</div></calcite-panel>
+        <calcite-panel heading=${t('emails.panel.who')} class="em-owners">${this.renderOwners()}</calcite-panel>
+        <calcite-panel heading=${t('emails.panel.template')} description=${t('emails.panel.template.description')} class="em-edit">${this.renderEditor()}</calcite-panel>
+        <calcite-panel heading=${t('emails.panel.preview')} description=${o ? t('emails.preview.description', { name: o.fullName }) : t('emails.preview.inbox')} class="em-prev">
+          <div class="em-prev-body">${o ? this.inbox(o) : html`<p class="muted">${t('emails.preview.empty')}</p>`}</div></calcite-panel>
       </div>
       ${this.renderBar()}`;
   }
@@ -715,13 +716,13 @@ export class DcEmails extends LitElement {
   private runRow(it: QueueItem) {
     const icon = it.phase === 'done' ? html`<calcite-icon icon="check-circle" scale="s" class="ok"></calcite-icon>`
       : it.phase === 'failed' || it.phase === 'not-added' ? html`<calcite-icon icon="exclamation-mark-triangle" scale="s" class="bad"></calcite-icon>`
-      : it.phase === 'sending' ? html`<calcite-loader inline label="Working"></calcite-loader>` : html`<calcite-icon icon="circle" scale="s"></calcite-icon>`;
+      : it.phase === 'sending' ? html`<calcite-loader inline label=${t('emails.working')}></calcite-loader>` : html`<calcite-icon icon="circle" scale="s"></calcite-icon>`;
     const failed = it.phase === 'failed' || it.phase === 'not-added';
     return html`<li class="run-row ${it.phase}" data-run=${it.username} data-phase=${it.phase}>
       <span class="ri">${icon}</span><calcite-avatar scale="s" full-name=${it.fullName} username=${it.username}></calcite-avatar>
-      <span class="rn"><b>${it.fullName}</b><small>${PHASE_LABEL[it.phase]}${failed && it.error ? `: ${it.error}` : ''}</small></span>
+      <span class="rn"><b>${it.fullName}</b><small>${phaseLabel(it.phase)}${failed && it.error ? `: ${it.error}` : ''}</small></span>
       ${failed ? html`<calcite-button scale="s" appearance="outline" kind="brand" icon-start="reset" data-action="retry" ?disabled=${this.snap?.running ?? false}
-        @click=${() => void this.retry(it.username)}>Try again</calcite-button>` : nothing}
+        @click=${() => void this.retry(it.username)}>${t('emails.try.again')}</calcite-button>` : nothing}
     </li>`;
   }
 
@@ -734,40 +735,39 @@ export class DcEmails extends LitElement {
     const waiting = s.items.filter((i) => i.phase === 'waiting');
     // DC-125d: a refusal from ArcGIS stops the run while owners are still waiting; nobody else is sent to until the admin says.
     const stopped = !!s.halted && waiting.length > 0 && !s.running;
-    const heading = settingUp ? 'Getting things ready' : stopped ? 'Stopped' : s.finished ? 'Nearly there' : s.paused ? 'Paused' : 'Sending the digests';
-    const sub = settingUp ? 'Setting up in your own org. Nothing has been sent yet.'
-      : s.finished ? `${s.sent} sent, ${s.failed} didn't go through. Have another go at the ones that stalled.`
-      : stopped ? 'ArcGIS Online refused an email, so nothing further goes out until you choose.'
-      : s.paused ? (s.running ? 'Finishing this owner, then nothing further goes out until you resume.' : 'Nothing further goes out until you resume.')
-      : 'One owner at a time: add, send, remove, so the group stays empty.';
+    const heading = settingUp ? t('emails.run.getting.ready') : stopped ? t('emails.run.stopped') : s.finished ? t('emails.run.nearly.there') : s.paused ? t('emails.run.paused') : t('emails.run.sending.digests');
+    const sub = settingUp ? t('emails.run.setup')
+      : s.finished ? t('emails.run.summary', { sent: s.sent, failed: s.failed })
+      : stopped ? t('emails.run.refused')
+      : s.paused ? (s.running ? t('emails.run.finishing') : t('emails.run.paused.wait'))
+      : t('emails.run.step');
     return html`<div class="run" data-run-state=${stopped ? 'stopped' : s.finished ? 'finished' : s.paused ? 'paused' : 'running'}>
       <div class="run-head"><div><h1>${heading}</h1><p class="lede">${sub}</p></div>
         <div class="run-act">${s.finished
-          ? html`<calcite-button data-action="finish" appearance="outline" kind="neutral" @click=${this.giveUp}>Finish without the rest</calcite-button>`
+          ? html`<calcite-button data-action="finish" appearance="outline" kind="neutral" @click=${this.giveUp}>${t('emails.button.finish')}</calcite-button>`
           : stopped ? nothing
           : html`<calcite-button data-action="pause" appearance="outline" kind="neutral" icon-start=${s.paused ? 'play' : 'pause'} ?disabled=${settingUp}
-              @click=${this.togglePause}>${s.paused ? 'Resume' : 'Pause'}</calcite-button>`}</div></div>
+              @click=${this.togglePause}>${s.paused ? t('emails.button.resume') : t('emails.button.pause')}</calcite-button>`}</div></div>
       <div class="em-setup-list">${this.setupRow()}</div>
       ${stopped ? this.renderStopped(s, waiting) : nothing}
-      <calcite-progress type="determinate" value=${n ? s.sent / n : 0} label="Send progress"></calcite-progress>
-      <p class="muted small" data-run-count>${s.sent} of ${n} sent</p>
-      <ul class="run-list" aria-label="Owners">${s.items.map((it) => this.runRow(it))}</ul>
-      ${this.demo ? html`<p class="em-note"><calcite-icon icon="information" scale="s" aria-hidden="true"></calcite-icon>Demo: nothing is really sent.</p>`
-        : html`<p class="em-note"><calcite-icon icon="lock" scale="s" aria-hidden="true"></calcite-icon>Sent from your own ArcGIS Online org, from this browser. Nothing goes through us.</p>`}
+      <calcite-progress type="determinate" value=${n ? s.sent / n : 0} label=${t('emails.progress.send')}></calcite-progress>
+      <p class="muted small" data-run-count>${t('emails.run.count', { sent: s.sent, total: n })}</p>
+      <ul class="run-list" aria-label=${t('emails.owners')}>${s.items.map((it) => this.runRow(it))}</ul>
+      ${this.demo ? html`<p class="em-note"><calcite-icon icon="information" scale="s" aria-hidden="true"></calcite-icon>${t('emails.note.demo')}</p>`
+        : html`<p class="em-note"><calcite-icon icon="lock" scale="s" aria-hidden="true"></calcite-icon>${t('emails.note.own.org')}</p>`}
     </div>`;
   }
 
   /** DC-125d: what ArcGIS said, how many went, who is left, and the two ways on. */
   private renderStopped(s: QueueSnapshot, waiting: QueueItem[]) {
-    const names = waiting.slice(0, 5).map((i) => i.fullName).join(', ') + (waiting.length > 5 ? ` and ${waiting.length - 5} more` : '');
+    const names = waiting.slice(0, 5).map((i) => i.fullName).join(', ') + (waiting.length > 5 ? t('emails.stopped.more', { count: waiting.length - 5 }) : '');
     const h = s.halted!, who = s.items.find((i) => i.username === h.username)?.fullName ?? h.username;
     return html`<div class="em-setup em-warn" role="alert" data-halted>
       <calcite-icon icon="exclamation-mark-triangle" scale="s" aria-hidden="true"></calcite-icon>
-      <span><b>ArcGIS Online refused the email to ${who}.</b> It said: “<span data-halted-message>${h.message}</span>”. ${plural(s.sent, 'owner has', 'owners have')} their email so far.
-        Still to go (${waiting.length}): <span data-halted-left>${names}</span>. Resume carries on from the next owner; ${who} can be tried again from the list.</span>
+      <span><b>${t('emails.stopped.intro', { name: who })}${t('emails.stopped.said')}<span data-halted-message>${h.message}</span>${t('emails.stopped.close')} ${t(s.sent === 1 ? 'emails.stopped.sent.one' : 'emails.stopped.sent.other', { count: s.sent })} ${t('emails.stopped.left', { count: waiting.length, names, name: who })}</span>
       <span class="run-act">
-        <calcite-button scale="s" data-action="resume-halt" icon-start="play" @click=${() => void this.resumeAfterStop()}>Resume</calcite-button>
-        <calcite-button scale="s" data-action="stop-here" appearance="outline" kind="neutral" @click=${this.stopHere}>Stop here</calcite-button>
+        <calcite-button scale="s" data-action="resume-halt" icon-start="play" @click=${() => void this.resumeAfterStop()}>${t('emails.button.resume')}</calcite-button>
+        <calcite-button scale="s" data-action="stop-here" appearance="outline" kind="neutral" @click=${this.stopHere}>${t('emails.stop.here')}</calcite-button>
       </span></div>`;
   }
 
@@ -778,24 +778,24 @@ export class DcEmails extends LitElement {
     const busy = s.running || this.setup === 'work';
     const failed = it.phase === 'failed' || it.phase === 'not-added';
     return html`<div class="run one" data-run-state="one">
-      <div class="run-head"><div><h1>One owner at a time</h1>
-        <p class="lede">${this.setup === 'work' ? 'Setting up in your own org. Nothing has been sent yet.' : `${s.sent} sent so far. Nothing goes out until you press Send on an owner.`}</p></div>
-        <calcite-button data-action="stop" appearance="outline" kind="neutral" ?disabled=${busy} @click=${() => this.finish()}>Stop here</calcite-button></div>
+      <div class="run-head"><div><h1>${t('emails.one.heading')}</h1>
+        <p class="lede">${this.setup === 'work' ? t('emails.run.setup') : t('emails.one.lede', { sent: s.sent })}</p></div>
+        <calcite-button data-action="stop" appearance="outline" kind="neutral" ?disabled=${busy} @click=${() => this.finish()}>${t('emails.stop.here')}</calcite-button></div>
       <div class="em-setup-list">${this.setupRow()}</div>
-      <calcite-progress type="determinate" value=${this.oneIdx / s.items.length} label="Progress"></calcite-progress>
-      <p class="one-count">${this.oneIdx + 1} of ${s.items.length}</p>
+      <calcite-progress type="determinate" value=${this.oneIdx / s.items.length} label=${t('emails.progress')}></calcite-progress>
+      <p class="one-count">${t('emails.run.step.count', { current: this.oneIdx + 1, total: s.items.length })}</p>
       <div class="one-card">
         <div class="one-who"><calcite-avatar scale="m" full-name=${o.fullName} username=${o.username}></calcite-avatar>
-          <span><b>${o.fullName}</b><small>${plural(o.rows.length, 'item', 'items')} · ≈ ${credit(totalCredits(o.rows))} credits a month</small></span>
-          <span class="one-status ${it.phase}" data-phase=${it.phase}>${it.phase === 'waiting' ? '' : `${PHASE_LABEL[it.phase]}${failed && it.error ? `: ${it.error}` : ''}`}</span></div>
+          <span><b>${o.fullName}</b><small>${plural(o.rows.length, 'item', 'items')} · ≈ ${credit(totalCredits(o.rows))} ${t('emails.credits.month')}</small></span>
+          <span class="one-status ${it.phase}" data-phase=${it.phase}>${it.phase === 'waiting' ? '' : `${phaseLabel(it.phase)}${failed && it.error ? `: ${it.error}` : ''}`}</span></div>
         ${this.inbox(o)}
       </div>
       <div class="one-act">
-        <calcite-button appearance="transparent" kind="neutral" icon-start="arrow-left" ?disabled=${busy || this.oneIdx === 0} @click=${() => { this.oneIdx -= 1; }}>Back</calcite-button>
+        <calcite-button appearance="transparent" kind="neutral" icon-start="arrow-left" ?disabled=${busy || this.oneIdx === 0} @click=${() => { this.oneIdx -= 1; }}>${t('emails.button.back')}</calcite-button>
         ${it.phase === 'done'
-          ? html`<calcite-button data-action="next" icon-end="arrow-right" ?disabled=${busy} @click=${() => this.oneAdvance()}>Next owner</calcite-button>`
-          : html`<calcite-button data-action="skip" appearance="outline" kind="neutral" ?disabled=${busy} @click=${() => { this.queue?.skip(it.username); this.oneAdvance(); }}>Skip</calcite-button>
-            <calcite-button data-action="send-one" icon-start="envelope" ?disabled=${busy} ?loading=${it.phase === 'sending'} @click=${() => void this.oneSend()}>${failed ? 'Try again' : 'Send this one'}</calcite-button>`}
+          ? html`<calcite-button data-action="next" icon-end="arrow-right" ?disabled=${busy} @click=${() => this.oneAdvance()}>${t('emails.button.next.owner')}</calcite-button>`
+          : html`<calcite-button data-action="skip" appearance="outline" kind="neutral" ?disabled=${busy} @click=${() => { this.queue?.skip(it.username); this.oneAdvance(); }}>${t('emails.button.skip')}</calcite-button>
+            <calcite-button data-action="send-one" icon-start="envelope" ?disabled=${busy} ?loading=${it.phase === 'sending'} @click=${() => void this.oneSend()}>${failed ? t('emails.button.try.again') : t('emails.button.send.one')}</calcite-button>`}
       </div>
     </div>`;
   }
@@ -811,32 +811,33 @@ export class DcEmails extends LitElement {
       <div class="confetti" aria-hidden="true">${sent.length ? Array.from({ length: 28 }, (_, i) => html`<i style="--x:${(i * 37) % 100}%;--d:${(i % 7) * 0.18}s;--c:${['var(--dc-brand-500)', 'var(--dc-pine)', 'var(--dc-amber)', 'var(--dc-raspberry)'][i % 4]};--s:${6 + (i % 3) * 3}px"></i>`) : nothing}</div>
       <div class="done-card">
         <div class="done-badge"><calcite-icon icon="envelope" scale="l"></calcite-icon></div>
-        <h1>${sent.length ? 'All sent. Nicely done.' : 'Nothing was sent'}</h1>
+        <h1>${sent.length ? t('emails.done.sent.heading') : t('emails.done.none.heading')}</h1>
         <p class="lede">${sent.length
-          ? html`${plural(sent.length, 'owner has', 'owners have')} a friendly note about ${plural(items, 'item', 'items')}. If they all get tidied, about <b class="cr">${credit(cr)} credits a month</b> come back to the org.`
-          : 'No one was emailed, and nothing was changed.'}</p>
+          ? tnParts('emails.done.sent.lede', sent.length).map((p, i) => i % 2 === 0 ? p
+            : p === 'items' ? html`<b>${tn('common.unit.items', items, { count: items })}</b>` : p === 'credits' ? html`<b class="cr">${credit(cr)}</b>` : `{${p}}`)
+          : t('emails.done.none.line')}</p>
         <ul class="done-facts">
-          <li><calcite-icon icon="check" scale="s"></calcite-icon>Nothing was deleted or changed in anyone's account.</li>
+          <li><calcite-icon icon="check" scale="s"></calcite-icon>${t('emails.done.safe')}</li>
           ${hasGroup ? (notRemoved.length
-            ? html`<li class="warn"><calcite-icon icon="exclamation-mark-triangle" scale="s"></calcite-icon>${plural(notRemoved.length, 'owner', 'owners')} couldn't be taken out of the hidden group. You can remove them in ArcGIS Online under Groups.</li>`
-            : html`<li><calcite-icon icon="check" scale="s"></calcite-icon>Every owner is out of the hidden group again.</li>`) : nothing}
+            ? html`<li class="warn"><calcite-icon icon="exclamation-mark-triangle" scale="s"></calcite-icon>${t(notRemoved.length === 1 ? 'emails.done.removed.summary.one' : 'emails.done.removed.summary.other')}</li>`
+            : html`<li><calcite-icon icon="check" scale="s"></calcite-icon>${t('emails.done.group.empty')}</li>`) : nothing}
           ${!sent.length ? nothing : this.logged
-            ? html`<li data-done-log="kept"><calcite-icon icon="check" scale="s"></calcite-icon>${plural(this.logged, 'send was', 'sends were')} noted in your private nudge log, so next time we'll flag who you've just nudged.</li>`
-            : html`<li data-done-log="none"><calcite-icon icon="check" scale="s"></calcite-icon>No nudge log was kept, so next time we can't flag who you already nudged.</li>`}
+            ? html`<li data-done-log="kept"><calcite-icon icon="check" scale="s"></calcite-icon>${t(this.logged === 1 ? 'emails.done.logged.one' : 'emails.done.logged.other', { count: this.logged })}</li>`
+            : html`<li data-done-log="none"><calcite-icon icon="check" scale="s"></calcite-icon>${t('emails.done.log.none')}</li>`}
           ${this.logWarn ? html`<li class="warn"><calcite-icon icon="exclamation-mark-triangle" scale="s"></calcite-icon>${this.logWarn}</li>` : nothing}
         </ul>
         ${hasGroup ? html`<div class="done-life">
-          <h2 class="em-h3"><calcite-icon icon="group" scale="s" aria-hidden="true"></calcite-icon> The hidden group</h2>
-          ${this.groupRemoved === 'yes' ? html`<div class="em-setup done" role="status"><span>Removed. Only the app's own group went; nobody's items were touched.</span></div>` : html`
+          <h2 class="em-h3"><calcite-icon icon="group" scale="s" aria-hidden="true"></calcite-icon>${t('emails.done.group.heading')}</h2>
+          ${this.groupRemoved === 'yes' ? html`<div class="em-setup done" role="status"><span>${t('emails.done.group.removed')}</span></div>` : html`
           <calcite-radio-button-group name="em-life" layout="vertical" scale="m" @calciteRadioButtonGroupChange=${(e: Event) => { this.lifeChoice = (e.target as HTMLInputElement & { selectedItem?: { value: string } }).selectedItem?.value === 'remove' ? 'remove' : 'keep'; }}>
-            <calcite-label layout="inline"><calcite-radio-button value="keep" ?checked=${this.lifeChoice === 'keep'}></calcite-radio-button><span><b>Keep the hidden group for next time (recommended).</b> It's empty and only you can see it.</span></calcite-label>
-            <calcite-label layout="inline"><calcite-radio-button value="remove" ?checked=${this.lifeChoice === 'remove'}></calcite-radio-button><span><b>Remove it now.</b> Only the app's own group goes, never anyone's items. We'd ask before creating it again.</span></calcite-label>
+            <calcite-label layout="inline"><calcite-radio-button value="keep" ?checked=${this.lifeChoice === 'keep'}></calcite-radio-button><span><b>${t('emails.done.group.keep')}</b></span></calcite-label>
+            <calcite-label layout="inline"><calcite-radio-button value="remove" ?checked=${this.lifeChoice === 'remove'}></calcite-radio-button><span><b>${t('emails.done.group.remove')}</b></span></calcite-label>
           </calcite-radio-button-group>
           ${this.lifeChoice === 'remove' ? html`<calcite-button data-action="remove-group" appearance="outline" kind="danger" icon-start="group" scale="s" ?loading=${this.groupRemoved === 'working'}
-            @click=${() => void this.removeGroup()}>Remove the hidden group</calcite-button>` : nothing}`}
+            @click=${() => void this.removeGroup()}>${t('emails.done.remove.button')}</calcite-button>` : nothing}`}
         </div>` : nothing}
-        <div class="done-act"><calcite-button id="done-back" icon-start="arrow-left" @click=${this.back}>Back to review</calcite-button>
-          <calcite-button appearance="outline" kind="neutral" @click=${this.again}>Write more emails</calcite-button></div>
+        <div class="done-act"><calcite-button id="done-back" icon-start="arrow-left" @click=${this.back}>${t('emails.back.review')}</calcite-button>
+          <calcite-button appearance="outline" kind="neutral" @click=${this.again}>${t('emails.done.write.more')}</calcite-button></div>
       </div>
     </div>`;
   }
@@ -844,17 +845,17 @@ export class DcEmails extends LitElement {
   /** DC-017 (ADR 0005 tier 3): the nudge-log choice in the confirm dialog. */
   private renderLogChoice() {
     if (!this.nudgeLog) {
-      return html`<p class="muted small" data-log-choice="unavailable">No nudge log here, so next time we can't flag who you already nudged.</p>`;
+      return html`<p class="muted small" data-log-choice="unavailable">${t('emails.dialog.log.unavailable')}</p>`;
     }
     const exists = this.logExists === true;
-    return html`<h3 class="em-h3">Keep a nudge log?</h3>
+    return html`<h3 class="em-h3">${t('emails.log.question')}</h3>
       <calcite-radio-button-group name="em-log" layout="vertical" scale="m" data-log-choice=${this.logChoice}
         @calciteRadioButtonGroupChange=${(e: Event) => { this.logChoice = (e.currentTarget as HTMLElement & { selectedItem?: { value: string } }).selectedItem?.value === 'none' ? 'none' : 'log'; }}>
         <calcite-label layout="inline"><calcite-radio-button value="log" data-log-option="log" ?checked=${this.logChoice === 'log'}></calcite-radio-button><span>${exists
-          ? html`<b>Add to your nudge log (recommended).</b> One row per owner in your private table “${LOG_TITLE}”: who, when and which items.`
-          : html`<b>Keep a nudge log (recommended).</b> We create one small private table, “${LOG_TITLE}”, in your own content: who was nudged, when and which items. It uses a negligible amount of storage.`}
-          No email addresses or message text. You can delete it any time from About; you’d lose the six-month memory.</span></calcite-label>
-        <calcite-label layout="inline"><calcite-radio-button value="none" data-log-option="none" ?checked=${this.logChoice === 'none'}></calcite-radio-button><span><b>Send without a log.</b> Nothing else is created, but next time we can't flag who you nudged. We'll remember this choice.</span></calcite-label>
+          ? html`<b>${t('emails.log.add.recommended')}</b> ${t('emails.log.add.description', { title: LOG_TITLE })}`
+          : html`<b>${t('emails.log.keep.recommended')}</b> ${t('emails.log.keep.description', { title: LOG_TITLE })}`}
+          ${t('emails.log.privacy')}</span></calcite-label>
+        <calcite-label layout="inline"><calcite-radio-button value="none" data-log-option="none" ?checked=${this.logChoice === 'none'}></calcite-radio-button><span><b>${t('emails.log.none.title')}</b> ${t('emails.log.none.description')}</span></calcite-label>
       </calcite-radio-button-group>`;
   }
 
@@ -869,49 +870,49 @@ export class DcEmails extends LitElement {
     const renudge = renudgeLine(n.filter((o) => o.nudgedRecently));
     const othersUnknown = !this.demo && getOthersUnreadable(this.orgId) ? othersUnreadableLine() : '';
     return html`
-      <calcite-dialog id="em-intro" modal @calciteDialogOpen=${this.focusMarked} heading="Before you send" width-scale="s" .open=${this.dialog === 'intro'} @calciteDialogClose=${this.onDialogClose('intro')}>
+      <calcite-dialog id="em-intro" modal @calciteDialogOpen=${this.focusMarked} heading=${t('emails.intro.title')} width-scale="s" .open=${this.dialog === 'intro'} @calciteDialogClose=${this.onDialogClose('intro')}>
         <ul class="em-intro">
-          <li><calcite-icon icon="envelope" scale="m" aria-hidden="true"></calcite-icon><span><b>Nothing goes out until you press Send and confirm.</b> Your test goes only to you.</span></li>
-          <li><calcite-icon icon="organization" scale="m" aria-hidden="true"></calcite-icon><span><b>Email goes through your own ArcGIS Online org, from this browser.</b> Nothing passes through us.</span></li>
-          <li><calcite-icon icon="group" scale="m" aria-hidden="true"></calcite-icon><span><b>Sending needs one hidden group.</b> Invitation-only and visible only to you. We ask before creating it, then reuse it. You can remove it any time from About.</span></li>
-          <li><calcite-icon icon="list-check" scale="m" aria-hidden="true"></calcite-icon><span><b>Your pace.</b> Send all at once, or one owner at a time.</span></li>
+          <li><calcite-icon icon="envelope" scale="m" aria-hidden="true"></calcite-icon><span>${t('emails.intro.confirm')}</span></li>
+          <li><calcite-icon icon="organization" scale="m" aria-hidden="true"></calcite-icon><span>${t('emails.intro.org')}</span></li>
+          <li><calcite-icon icon="group" scale="m" aria-hidden="true"></calcite-icon><span>${t('emails.intro.group')}</span></li>
+          <li><calcite-icon icon="list-check" scale="m" aria-hidden="true"></calcite-icon><span>${t('emails.intro.pace')}</span></li>
         </ul>
-        <calcite-label layout="inline" slot="footer-start"><calcite-checkbox id="em-intro-skip" ?checked=${introHidden()}></calcite-checkbox>Don't show this again</calcite-label>
-        <calcite-button slot="footer-end" data-action="intro-ok" data-focus @click=${this.closeIntro}>Got it</calcite-button>
+        <calcite-label layout="inline" slot="footer-start"><calcite-checkbox id="em-intro-skip" ?checked=${introHidden()}></calcite-checkbox>${t('emails.intro.skip')}</calcite-label>
+        <calcite-button slot="footer-end" data-action="intro-ok" data-focus @click=${this.closeIntro}>${t('emails.intro.got.it')}</calcite-button>
       </calcite-dialog>
 
       <dc-turn-on-sending .open=${this.dialog === 'turn-on'} @dc-turn-on-close=${() => { if (this.dialog === 'turn-on') this.closeDialog(); }}
         @dc-turn-on-confirm=${() => { this.dialog = null; void this.turnOn(); }}></dc-turn-on-sending>
 
-      <calcite-dialog id="em-confirm" modal @calciteDialogOpen=${this.focusMarked} heading=${one ? 'Ready to start?' : 'Ready to send?'} width-scale="s" .open=${this.dialog === 'confirm'} @calciteDialogClose=${() => { if (this.dialog === 'confirm') this.cancelConfirm(); }}>
+      <calcite-dialog id="em-confirm" modal @calciteDialogOpen=${this.focusMarked} heading=${one ? t('emails.confirm.one') : t('emails.confirm.all') } width-scale="s" .open=${this.dialog === 'confirm'} @calciteDialogClose=${() => { if (this.dialog === 'confirm') this.cancelConfirm(); }}>
         <div data-confirm>
-          <p><b>${plural(n.length, 'owner', 'owners')}</b> will each get one email, covering <b>${plural(items, 'item', 'items')}</b> (about ${credit(cr)} credits a month between them). This is the real thing, not a test.${one ? ' You’ll see each email first and choose Send or Skip. Nothing goes out until you press Send on that owner.' : ''}</p>
-          <p>We use your hidden group, “${GROUP_TITLE}”: each owner is added, sent their one email, and removed again straight after.${needGroup ? ' It doesn’t exist yet, so we create it first: hidden, invitation-only, and only you can see it.' : ''}</p>
+          <p><b>${plural(n.length, 'owner', 'owners')}</b>${t('emails.confirm.after.items')}<b>${plural(items, 'item', 'items')}</b>${t('emails.confirm.after.count', { credits: credit(cr) })}${one ? t('emails.confirm.one.more') : ''}</p>
+          <p>${t('emails.confirm.group', { title: GROUP_TITLE })}${needGroup ? t('emails.confirm.group.create') : ''}</p>
           ${limitNotes.length ? html`<p data-confirm-limit>${limitNotes.join(' ')}</p>` : nothing}
           ${noMailLine ? html`<p data-confirm-noemail>${noMailLine}</p>` : nothing}
           ${renudge ? html`<p data-confirm-renudge>${renudge}</p>` : nothing}
           ${othersUnknown ? html`<p data-confirm-others-unknown class="muted small">${othersUnknown}</p>` : nothing}
-          ${this.testSentAt ? nothing : html`<calcite-notice open kind="warning" icon="exclamation-mark-triangle" scale="s"><div slot="message">You haven't sent yourself a test yet. It only takes a moment.</div></calcite-notice>`}
+          ${this.testSentAt ? nothing : html`<calcite-notice open kind="warning" icon="exclamation-mark-triangle" scale="s"><div slot="message">${t('emails.confirm.test.first')}</div></calcite-notice>`}
           ${this.renderLogChoice()}
         </div>
-        <calcite-button slot="footer-start" appearance="transparent" kind="neutral" data-focus @click=${this.cancelConfirm}>Go back</calcite-button>
-        <calcite-button slot="footer-end" data-action="confirm-send" icon-start="envelope" @click=${this.confirmSend}>${one ? 'Start, one at a time' : `Send ${plural(n.length, 'email', 'emails')} for real`}</calcite-button>
+        <calcite-button slot="footer-start" appearance="transparent" kind="neutral" data-focus @click=${this.cancelConfirm}>${t('emails.confirm.go.back')}</calcite-button>
+        <calcite-button slot="footer-end" data-action="confirm-send" icon-start="envelope" @click=${this.confirmSend}>${one ? t('emails.confirm.start.one') : t(n.length === 1 ? 'emails.confirm.send.one' : 'emails.confirm.send.other', { count: n.length })}</calcite-button>
       </calcite-dialog>
 
-      <calcite-dialog id="em-tone-dlg" modal @calciteDialogOpen=${this.focusMarked} heading="Switch tone?" width-scale="s" .open=${this.dialog === 'tone'} @calciteDialogClose=${this.onDialogClose('tone')}>
-        <p>Switching to ${this.pendingTone ? TONES[this.pendingTone].label : ''} replaces the template and subject you've edited. Start again from that tone?</p>
-        <calcite-button slot="footer-start" appearance="transparent" kind="neutral" data-focus @click=${() => this.closeDialog()}>Keep my edits</calcite-button>
-        <calcite-button slot="footer-end" @click=${() => { const k = this.pendingTone; this.pendingTone = null; this.closeDialog(); if (k) this.applyTone(k); }}>Switch and replace</calcite-button>
+      <calcite-dialog id="em-tone-dlg" modal @calciteDialogOpen=${this.focusMarked} heading=${t('emails.tone.switch.heading')} width-scale="s" .open=${this.dialog === 'tone'} @calciteDialogClose=${this.onDialogClose('tone')}>
+        <p>${t('emails.tone.switch.body', { tone: this.pendingTone ? TONES[this.pendingTone].label : '' })}</p>
+        <calcite-button slot="footer-start" appearance="transparent" kind="neutral" data-focus @click=${() => this.closeDialog()}>${t('emails.tone.keep')}</calcite-button>
+        <calcite-button slot="footer-end" @click=${() => { const k = this.pendingTone; this.pendingTone = null; this.closeDialog(); if (k) this.applyTone(k); }}>${t('emails.tone.replace')}</calcite-button>
       </calcite-dialog>
 
-      <calcite-dialog id="em-link-dlg" modal @calciteDialogOpen=${this.focusMarked} heading="Add a link" width-scale="s" .open=${this.dialog === 'link'} @calciteDialogClose=${this.onDialogClose('link')}>
-        <calcite-label>Web address<calcite-input id="em-link-url" data-focus type="url" placeholder="https://" label="Web address" value="https://"
+      <calcite-dialog id="em-link-dlg" modal @calciteDialogOpen=${this.focusMarked} heading=${t('emails.link.add.heading')} width-scale="s" .open=${this.dialog === 'link'} @calciteDialogClose=${this.onDialogClose('link')}>
+        <calcite-label>${t('emails.link.web.address')}<calcite-input id="em-link-url" data-focus type="url" placeholder="https://" label=${t('emails.link.web.address')} value="https://"
           @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') this.addLink(); }}></calcite-input></calcite-label>
-        <p class="muted small">Links to your org's own items are safest: ArcGIS Online may refuse to send links it can't check.</p>
-        <calcite-button slot="footer-end" @click=${this.addLink}>Add link</calcite-button>
+        <p class="muted small">${t('emails.link.safety')}</p>
+        <calcite-button slot="footer-end" @click=${this.addLink}>${t('emails.link.add.button')}</calcite-button>
       </calcite-dialog>
 
-      <calcite-alert kind=${this.toast?.kind ?? 'success'} icon=${this.toast?.kind === 'danger' ? 'exclamation-mark-triangle' : 'envelope'} auto-close auto-close-duration="medium" placement="bottom" label="Notice"
+      <calcite-alert kind=${this.toast?.kind ?? 'success'} icon=${this.toast?.kind === 'danger' ? 'exclamation-mark-triangle' : 'envelope'} auto-close auto-close-duration="medium" placement="bottom" label=${t('emails.alert.label')}
         .open=${!!this.toast} @calciteAlertClose=${() => { this.toast = null; }}>
         <div slot="title">${this.toast?.title ?? ''}</div><div slot="message" data-toast>${this.toast?.message ?? ''}</div>
       </calcite-alert>`;

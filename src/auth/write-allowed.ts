@@ -1,3 +1,5 @@
+import { onLocaleChange, t } from '../i18n';
+
 // Default-deny writes by org (DC-058). A session may build a real notifier only when its org id (portals/self.id)
 // is listed in VITE_WRITABLE_ORG_IDS. Everything else is read-only: no groups, no notifications, no items.
 
@@ -14,4 +16,5 @@ export function writeAllowed(orgId: string | null | undefined, list: string | re
 }
 
 /** The copy shown wherever sending would be: calm, and not a fault of the admin. */
-export const READ_ONLY_NOTE = 'Sending is switched off for this organisation in this build.';
+export let READ_ONLY_NOTE = t('auth.readOnlyNote');
+onLocaleChange(() => { READ_ONLY_NOTE = t('auth.readOnlyNote'); });

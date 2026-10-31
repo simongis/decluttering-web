@@ -1,8 +1,9 @@
 // Pure helpers for the review components (tone-guide copy, tick state, sparkline geometry). No DOM.
 import type { Option, OwnerGroup, Row, Thresholds } from '../../domain/types';
 import { describe, lastUsedWords, span, viewsWords } from '../../domain/stale';
-import { fmtMonthYear, formatMB } from '../../domain/format';
+import { fmtInt, fmtMonthYear, formatMB } from '../../domain/format';
 import { credit, plural } from '../shared/text';
+import { t } from '../../i18n';
 
 /** Tick state: items, not owners, carry the tick. A recently nudged owner starts with every item unticked. */
 export const itemOn = (items: ReadonlyMap<string, boolean>, o: OwnerGroup, r: Row): boolean =>
@@ -13,12 +14,13 @@ export const sumSvc = (rows: Row[]): number => rows.reduce((a, r) => a + svcCoun
 export const includedRows = (items: ReadonlyMap<string, boolean>, o: OwnerGroup): Row[] => o.rows.filter((r) => itemOn(items, o, r));
 
 /** The rule in plain words, as displayed (tone guide rewrites 5, 7, 8, 9). Skips the usage clause when usage is hidden. */
-export function sayRule(t: Thresholds, canSeeUsage: boolean, member = false): string {
-  const who = member ? 'We pick out your layers' : 'We pick out layers';
-  if (canSeeUsage) return describe(t).replace('We flag a layer', who);
-  const by = t.maxUsedBy === 0 ? 'no maps or apps use it' : `at most ${plural(t.maxUsedBy, 'map or app', 'maps or apps')} ${t.maxUsedBy === 1 ? 'uses' : 'use'} it`;
-  const size = t.minSizeMB ? ` and it is at least ${t.minSizeMB >= 1024 ? `${t.minSizeMB / 1024} GB` : `${t.minSizeMB} MB`}` : '';
-  return `${who} that were last updated more than ${span(t.minDaysSinceUpdate)} ago, where ${by}${size}. Usage isn't available with your access, so it isn't part of the rule.`;
+export function sayRule(thresholds: Thresholds, canSeeUsage: boolean, member = false): string {
+  if (canSeeUsage) return describe(thresholds, member, true);
+  const by = thresholds.maxUsedBy === 0 ? t('review.helpers.by.noMaps') : t(thresholds.maxUsedBy === 1 ? 'review.helpers.by.maxOne' : 'review.helpers.by.maxMany', { count: fmtInt(thresholds.maxUsedBy) });
+  const size = thresholds.minSizeMB ? t('review.helpers.ruleSize', { size: thresholds.minSizeMB >= 1024 ? `${thresholds.minSizeMB / 1024} GB` : `${thresholds.minSizeMB} MB` }) : '';
+  return t(member ? 'review.helpers.ruleNoUsage.member' : 'review.helpers.ruleNoUsage', {
+    updateSpan: span(thresholds.minDaysSinceUpdate), by, sizeClause: size,
+  });
 }
 
 type WhyRow = Pick<Row, 'lastUsedDaysAgo' | 'useKnown' | 'noUseRecorded' | 'lastModified' | 'usedBy'> & Partial<Pick<Row, 'numViews'>>;
@@ -28,18 +30,18 @@ type WhyRow = Pick<Row, 'lastUsedDaysAgo' | 'useKnown' | 'noUseRecorded' | 'last
  * 585,557 views all time". Without usage access it leaves out the last-used clause. `stopped`: the scan was stopped early.
  */
 export function sayWhy(row: WhyRow, canSeeUsage: boolean, depsKnown = true, stopped = false): string {
-  const by = !depsKnown ? (stopped ? 'used by: not checked' : 'used by: still checking…')
-    : row.usedBy === 0 ? 'no maps or apps use it' : `used by ${plural(row.usedBy, 'map or app', 'maps or apps')}`;
+  const by = !depsKnown ? t(stopped ? 'review.helpers.by.notChecked' : 'review.helpers.by.checking')
+    : row.usedBy === 0 ? t('review.helpers.by.noMaps') : t(row.usedBy === 1 ? 'review.helpers.by.map' : 'review.helpers.by.maps', { count: fmtInt(row.usedBy) });
   const views = viewsWords(row.numViews);
-  const parts = [`last updated ${fmtMonthYear(row.lastModified)}`, by, ...(views ? [views] : [])];
-  if (canSeeUsage) parts.unshift(lastUsedWords(row));
-  const line = parts.join(' · ');
-  return line.charAt(0).toUpperCase() + line.slice(1);
+  const viewsTail = views ? ` · ${views}` : '';
+  return canSeeUsage
+    ? t(views ? 'review.helpers.why.usage.views' : 'review.helpers.why.usage', { lastUsed: lastUsedWords(row), date: fmtMonthYear(row.lastModified), by, viewsTail })
+    : t(views ? 'review.helpers.why.noUsage.views' : 'review.helpers.why.noUsage', { date: fmtMonthYear(row.lastModified), by, viewsTail });
 }
 
 /** The size chip: "2 MB" or "14.6 MB", or "Size not measured yet" while sizing runs, "Size not measured" after a stop (DC-053). */
 export const saySize = (row: Pick<Row, 'sizeMB' | 'sizeKnown'>, stopped = false): string =>
-  row.sizeKnown ? formatMB(row.sizeMB) : stopped ? 'Size not measured' : 'Size not measured yet';
+  row.sizeKnown ? formatMB(row.sizeMB) : t(stopped ? 'review.family.sizeNotMeasured' : 'review.family.sizeNotMeasuredYet');
 
 /** The credit chip's label and tooltip. DC-134: names the attachments when there are some, since they cost far less per MB. */
 export const sayCredits = (row: Pick<Row, 'credits' | 'attachmentMB'>): string =>
@@ -91,8 +93,8 @@ export function optionLabel(key: OptionKey, v: number): string {
     case 'minDaysSinceUse':
     case 'minDaysSinceUpdate':
       return v > 0 && v % 365 === 0 ? plural(v / 365, 'year', 'years') : v > 0 && v % 30 === 0 ? plural(v / 30, 'month', 'months') : plural(v, 'day', 'days');
-    case 'maxUsedBy': return v === 0 ? 'No maps or apps' : `At most ${v}`;
-    case 'minSizeMB': return v === 0 ? 'Any size' : v >= 1024 ? `${v / 1024} GB` : `${v} MB`;
+    case 'maxUsedBy': return v === 0 ? t('domain.label.noMaps') : t('domain.label.atMost', { count: v });
+    case 'minSizeMB': return v === 0 ? t('domain.label.anySize') : v >= 1024 ? `${v / 1024} GB` : `${v} MB`;
   }
 }
 

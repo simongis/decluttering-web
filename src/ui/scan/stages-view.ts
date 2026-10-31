@@ -3,9 +3,10 @@
 // the stage list, the tab title, and when the big-org card shows. Only stage changes and completion are announced.
 import type { ScanEstimate, ScanStages, StageId, StageProgress, StageState } from '../../scan/types';
 import { sayRemaining } from './estimate';
+import { formatNumber, t, tn } from '../../i18n';
 
-const fmt = (n: number): string => Math.round(n).toLocaleString('en-AU');
-const plural = (n: number, a: string, b: string) => `${fmt(n)} ${n === 1 ? a : b}`;
+const fmt = (n: number): string => formatNumber(Math.round(n));
+
 
 export const ALL_DONE = 'All done. Take a look around the map, or move on to the review.';
 export const STOPPED_LINE = 'Stopped. Next time we pick up where we left off.';
@@ -13,29 +14,35 @@ export const APP_TITLE = 'Decluttering';
 
 /** "1,240 of 3,050", "2,300 so far", or '' when nothing is counted yet. */
 export function stageCount(s: Pick<StageProgress, 'done' | 'total'>): string {
-  if (s.total === null) return s.done > 0 ? `${fmt(s.done)} so far` : '';
-  return `${fmt(Math.min(s.done, s.total))} of ${fmt(s.total)}`;
+  if (s.total === null) return s.done > 0 ? t('scan.phase-stage.count-null', { count: fmt(s.done) }) : '';
+  return t('scan.phase-stage.count-known', { done: fmt(Math.min(s.done, s.total)), total: fmt(s.total) });
 }
 
 const stageOf = (st: ScanStages, id: StageId): StageProgress => st.stages.find((s) => s.id === id) as StageProgress;
 
+function stageLabel(id: StageId): string {
+  return id === 'find' ? t('scan.phase-stage.find') : id === 'measure' ? t('scan.phase-stage.measure') : t('scan.phase-stage.deps');
+}
+
 /** The one line above the bar: "Checking maps and apps: 1,240 of 3,050". */
 export function currentLine(st: ScanStages | null): string {
-  if (!st) return 'Getting started…';
-  if (st.finished) return ALL_DONE;
-  if (st.stopped) return STOPPED_LINE;
-  if (!st.current) return 'Finishing up…';
+  if (!st) return t('scan.line.getting-started');
+  if (st.finished) return t('scan.line.finished');
+  if (st.stopped) return t('scan.line.stopped');
+  if (!st.current) return t('scan.line.finishing');
   const s = stageOf(st, st.current);
   // Sizes (the headline) often start after use and views: say what is moving instead of a count stuck at 0.
   if (s.id === 'measure' && s.done === 0) {
     const { usage, views } = s.parts;
     const layers = stageOf(st, 'find').total;
-    const of = layers ? ` for ${plural(layers, 'layer', 'layers')}` : '';
-    if (usage && (usage.total === null || usage.done < usage.total)) return `${s.label}: reading use${of}…`;
-    if (views && views.total !== null && views.done < views.total) return `${s.label}: matching views to their layers…`;
+    const of = layers ? tn('scan.line.for-layers', layers, { count: fmt(layers) }) : '';
+    const label = stageLabel(s.id);
+    if (usage && (usage.total === null || usage.done < usage.total)) return t('scan.line.reading-use', { label, layers: of });
+    if (views && views.total !== null && views.done < views.total) return t('scan.line.matching-views', { label });
   }
   const c = stageCount(s);
-  return c ? `${s.label}: ${c}` : `${s.label}…`;
+  const label = stageLabel(s.id);
+  return c ? t('scan.line.with-count', { label, count: c }) : `${label}…`;
 }
 
 /** Services the search said there are (the dot map lays its grid out for them, so dots fill in without shifting). */
@@ -45,11 +52,11 @@ export function servicesExpected(st: ScanStages | null): number {
 
 /** The announced line (role=status): the stage in plain words, never the counts, so it only changes with the stage. */
 export function announceLine(st: ScanStages | null): string {
-  if (!st) return 'Getting started.';
-  if (st.finished) return ALL_DONE;
-  if (st.stopped) return STOPPED_LINE;
-  const label = st.current ? `${stageOf(st, st.current).label}.` : 'Finishing up.';
-  return st.readyToReview ? `Ready to review. ${label}` : label;
+  if (!st) return t('scan.line.getting-started-period');
+  if (st.finished) return t('scan.line.finished');
+  if (st.stopped) return t('scan.line.stopped');
+  const label = st.current ? t('scan.line.ready-label', { label: stageLabel(st.current) }) : t('scan.line.finishing');
+  return st.readyToReview ? t('scan.line.ready', { label }) : label;
 }
 
 export interface StageRow { id: StageId; label: string; state: StageState; count: string; detail: string; fraction: number }
@@ -60,39 +67,39 @@ export function stageRows(st: ScanStages | null, mode = 'admin'): StageRow[] {
   return st.stages.map((s) => {
     const p = s.parts;
     let detail = '';
-    if (s.state === 'waiting') detail = 'Waiting its turn';
+    if (s.state === 'waiting') detail = t('scan.phase-stage.waiting');
     else if (s.id === 'find') {
       const owners = p.owners;
-      detail = mode === 'my-items' ? (s.state === 'done' ? 'All matched to your account' : 'Matching them to your account')
-        : owners && owners.total !== null && owners.total > 0 ? (owners.done >= owners.total ? plural(owners.total, 'owner', 'owners') : `owners ${fmt(owners.done)} of ${fmt(owners.total)}`) : '';
+      detail = mode === 'my-items' ? (s.state === 'done' ? t('scan.phase-stage.matched') : t('scan.phase-stage.matching'))
+        : owners && owners.total !== null && owners.total > 0 ? (owners.done >= owners.total ? tn('scan.phase-stage.owner-count', owners.total, { count: fmt(owners.total) }) : t('scan.phase-stage.owners', { done: fmt(owners.done), total: fmt(owners.total) })) : '';
     } else if (s.id === 'measure') {
       const usage = p.usage, views = p.views;
       const bits = [
-        usage && usage.total !== null ? (usage.done >= usage.total ? 'use in' : 'reading use') : null,
-        views && views.total !== null && views.total > 0 && views.done < views.total ? 'matching views' : null,
+        usage && usage.total !== null ? (usage.done >= usage.total ? t('scan.phase-stage.use-in') : t('scan.phase-stage.reading-use-short')) : null,
+        views && views.total !== null && views.total > 0 && views.done < views.total ? t('scan.phase-stage.matching-views-short') : null,
       ].filter(Boolean);
       detail = bits.join(' · ');
     } else if (s.id === 'deps') {
-      detail = s.state === 'done' && s.total === 0 ? 'No maps or apps to check' : s.total === null ? 'Listing maps and apps' : '';
+      detail = s.state === 'done' && s.total === 0 ? t('scan.phase-stage.no-deps') : s.total === null ? t('scan.phase-stage.listing-deps') : '';
     }
-    if (s.state === 'stopped') detail = 'Stopped here; next time we carry on';
-    return { id: s.id, label: s.label, state: s.state, count: stageCount(s), detail, fraction: s.fraction };
+    if (s.state === 'stopped') detail = t('scan.phase-stage.stopped');
+    return { id: s.id, label: stageLabel(s.id), state: s.state, count: stageCount(s), detail, fraction: s.fraction };
   });
 }
 
 /** The tab title: "42% · Decluttering" while it runs, "Done · Decluttering" at the end. */
 export function tabTitle(st: ScanStages | null, base = APP_TITLE): string {
   if (!st) return base;
-  if (st.finished) return `Done · ${base}`;
-  if (st.stopped) return `Stopped · ${base}`;
+  if (st.finished) return `${t('scan.tab.done')} · ${base}`;
+  if (st.stopped) return `${t('scan.tab.stopped')} · ${base}`;
   return `${st.percent}% · ${base}`;
 }
 
 /** FB-23: a calm line that shows the scan is smart (several requests at once), never an error. */
 export function crawlLine(e: Pick<ScanEstimate, 'limit' | 'slowedDown'> | null | undefined): string | null {
   if (!e || e.limit <= 0) return null;
-  if (e.slowedDown) return 'Going gently: ArcGIS Online asked us to slow down';
-  return `${e.limit} requests at a time · steady`;
+  if (e.slowedDown) return t('scan.line.crawl-slow');
+  return t('scan.line.crawl-steady', { count: e.limit });
 }
 
 /** The big-org card appears after this much time, if the scan still has a while to go. */

@@ -4,6 +4,7 @@
 // Overall progress is weighted by what each phase costs (docs/research/live-performance-2026-10-15.md: maps and apps is
 // about 85% of a fresh scan), so a steady rate in weighted terms is a fair basis for a finish estimate.
 import type { PhaseId } from '../../scan/types';
+import { t, tn } from '../../i18n';
 
 /** Relative cost of each phase on a fresh scan (milliseconds measured on a 79-service org, rounded). */
 export const PHASE_WEIGHTS: Record<PhaseId, number> = { find: 300, size: 3500, views: 1000, usage: 1500, owners: 300, deps: 42000 };
@@ -38,9 +39,9 @@ export function overallFraction(
 
 /** Plain words for a remaining time, rounded; never a seconds countdown. */
 export function sayRemaining(ms: number): string {
-  if (ms < 60000) return 'under a minute left';
+  if (ms < 60000) return t('scan.time.under-minute');
   const n = Math.round(ms / 60000);
-  return `about ${n} ${n === 1 ? 'minute' : 'minutes'} left`;
+  return n === 1 ? t('scan.time.about-minute') : tn('scan.time.about-minutes', n, { count: n });
 }
 
 /** Null hides the estimate: too early, no measurable progress, a big jump, or an unstable rate. */
@@ -99,16 +100,16 @@ export function rescanEstimate(items: number, last?: FullScanStat | null): { ms:
 /** A friendly length of time, without a lead word: "a minute", "7 minutes", "25 minutes", "an hour", "2 hours". */
 export function sayDuration(ms: number): string {
   const min = ms / 60000;
-  if (min < 1.5) return 'a minute';
-  if (min < 10) return `${Math.round(min)} minutes`;
-  if (min < 52.5) return `${Math.round(min / 5) * 5} minutes`;
-  if (min < 67.5) return 'an hour';
+  if (min < 1.5) return t('scan.time.a-minute');
+  if (min < 10) return tn('scan.time.minutes', Math.round(min), { count: Math.round(min) });
+  if (min < 52.5) return t('scan.time.minute-round', { count: Math.round(min / 5) * 5 });
+  if (min < 67.5) return t('scan.time.hour');
   const halves = Math.round(min / 30) / 2;
-  if (halves === 1.5) return 'an hour and a half';
-  return Number.isInteger(halves) ? `${halves} hours` : `${Math.floor(halves)} and a half hours`;
+  if (halves === 1.5) return t('scan.time.hour-half');
+  return Number.isInteger(halves) ? t('scan.time.hours', { count: halves }) : t('scan.time.hours-half', { count: Math.floor(halves) });
 }
 
 /** "about 25 minutes, based on your last full scan", or "roughly 25 minutes, going by how many services there are". */
 export function sayRescan(e: { ms: number; measured: boolean }): string {
-  return e.measured ? `about ${sayDuration(e.ms)}, based on your last full scan` : `roughly ${sayDuration(e.ms)}, going by how many services there are`;
+  return t(e.measured ? 'scan.time.measured' : 'scan.time.estimated', { duration: sayDuration(e.ms) });
 }

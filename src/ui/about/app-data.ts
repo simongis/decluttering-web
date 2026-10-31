@@ -5,7 +5,7 @@
 import { GROUP_TITLE, type GroupNotifier } from '../../notify';
 import { LOG_TITLE, type NudgeLog } from '../../log';
 import { itemUrl } from '../../domain/format';
-import { TURN_OFF } from '../access/turn-off-copy';
+import { onLocaleChange, t, tn } from '../../i18n';
 
 /** What the section needs of the org: its id (the log's cache key) and where its pages live. */
 export interface AppDataOrg { id: string; urlKey: string; customBaseUrl?: string }
@@ -92,34 +92,36 @@ export async function removeAppLog(nudgeLog: NudgeLog, org: AppDataOrg, itemId: 
 
 const groupsHref = (org: AppDataOrg): string => groupHref(org, '').replace('group.html?id=', 'groups.html');
 
-const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
-
 /** The words on the section, from docs/research/app-data-lifecycle.md section 3. */
-export const COPY = {
-  heading: 'App data in your org',
-  intro: 'The app made these in your org. Removing one only removes the app’s own thing, never anyone’s items.',
-  loading: 'Checking what the app has in your org…',
-  groupRow: `Hidden group: ${GROUP_TITLE}`,
-  groupNote: 'Normally empty; only you can see it.',
-  logRow: `Nudge log: ${LOG_TITLE}`,
-  logNote: (sends: number | null): string => (sends === null ? 'Who was nudged, and when.' : `${plural(sends, 'send', 'sends')} recorded.`),
-  open: 'Open in ArcGIS Online',
-  removeGroup: 'Turn off sending (remove your group)',
-  deleteLog: 'Delete log…',
-  keep: 'Keep it',
-  groupConfirmHeading: TURN_OFF.heading,
-  groupConfirm: TURN_OFF.body,
-  groupConfirmButton: TURN_OFF.yes,
-  groupKeep: TURN_OFF.keep,
-  logConfirmHeading: 'Delete the nudge log?',
-  logConfirm: (rows: number | null): string =>
-    `This deletes the table “${LOG_TITLE}” from your content, with ${rows === null ? 'its rows' : `its ${plural(rows, 'row', 'rows')}`}. ` +
-    'We lose the record of who you nudged, so owners could be nudged again sooner than six months, and Review can no longer show what happened since a nudge. ' +
-    "Nobody's items are touched.",
-  logConfirmButton: 'Delete log',
-  groupFailed: 'ArcGIS Online wouldn’t remove it. You can remove it yourself under Groups.',
-  logFailed: 'ArcGIS Online wouldn’t delete it. You can remove it yourself in Content.',
-  groupDone: 'The hidden group was removed. Nobody’s items were touched.',
-  logDone: 'The nudge log was deleted. Nobody’s items were touched.',
-  busy: 'Available again when the send finishes.',
-} as const;
+function makeCopy() {
+  return {
+    heading: t('about.appData.heading'),
+    intro: t('about.appData.intro'),
+    loading: t('about.appData.loading'),
+    groupRow: t('about.appData.groupRow', { title: GROUP_TITLE }),
+    groupNote: t('about.appData.groupNote'),
+    logRow: t('about.appData.logRow', { title: LOG_TITLE }),
+    logNote: (sends: number | null): string => sends === null ? t('about.appData.logNoteUnknown') : tn('about.appData.logNote', sends),
+    open: t('about.appData.open'),
+    removeGroup: t('about.appData.removeGroup'),
+    deleteLog: t('about.appData.deleteLog'),
+    keep: t('about.appData.keep'),
+    groupConfirmHeading: t('about.appData.groupConfirmHeading'),
+    groupConfirm: t('about.appData.groupConfirm'),
+    groupConfirmButton: t('about.appData.groupConfirmButton'),
+    groupKeep: t('about.appData.groupKeep'),
+    logConfirmHeading: t('about.appData.logConfirmHeading'),
+    logConfirm: (rows: number | null): string => rows === null
+      ? t('about.appData.logConfirmUnknown', { title: LOG_TITLE })
+      : t(rows === 1 ? 'about.appData.logConfirmOne' : 'about.appData.logConfirmMany', { title: LOG_TITLE, count: rows }),
+    logConfirmButton: t('about.appData.logConfirmButton'),
+    groupFailed: t('about.appData.groupFailed'),
+    logFailed: t('about.appData.logFailed'),
+    groupDone: t('about.appData.groupDone'),
+    logDone: t('about.appData.logDone'),
+    busy: t('about.appData.busy'),
+  } as const;
+}
+
+export let COPY = makeCopy();
+onLocaleChange(() => { COPY = makeCopy(); });

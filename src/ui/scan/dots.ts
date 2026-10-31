@@ -8,6 +8,7 @@ import type { Data, Owner, Row, Service, Thresholds } from '../../domain/types';
 import { PRESETS, allRows, creditsPerMonth, evaluate, sweepsOf } from '../../domain/stale';
 import { sweepSummary, type SweepSummary } from '../../domain/sweep';
 import { sayWhy } from '../review/helpers';
+import { t as translate } from '../../i18n';
 
 /** What the search says about a service; url, modified and view-ness let the map place it before the core is in (DC-071c). */
 export interface FoundItem {
@@ -61,7 +62,6 @@ export const SCAN_THRESHOLDS: Thresholds = PRESETS.balanced;
 
 // The why line says "used by: still checking…" until every map and app is read, like the review (FB-15).
 // A disabled owner's stale item stays on the map but is outside the stale total (the review lists it under "No one to nudge").
-const DISABLED_WHY = "Owner can't be emailed: their account is disabled";
 const dotOf = (r: Row, candidate: boolean, depsKnown: boolean): Dot => ({
   id: r.source.id, title: r.source.title, owner: r.owner.fullName || r.owner.username || r.source.owner,
   sizeMB: r.sizeMB, sized: r.sizeKnown, credits: r.credits,
@@ -69,7 +69,7 @@ const dotOf = (r: Row, candidate: boolean, depsKnown: boolean): Dot => ({
   staleness: Math.min(1, Math.max(0, r.staleness)),
   usedBy: r.usedBy, lastUsedDaysAgo: r.lastUsedDaysAgo, daysSinceUpdate: r.daysSinceUpdate,
   nSvc: 1 + r.views.length, why: '', view: r.source.isView || undefined,
-  whyOf: () => (r.stale && r.owner.disabled ? `${sayWhy(r, true, depsKnown)} · ${DISABLED_WHY}` : sayWhy(r, true, depsKnown)),
+  whyOf: () => (r.stale && r.owner.disabled ? `${sayWhy(r, true, depsKnown)} · ${translate('scan.map.owner-disabled')}` : sayWhy(r, true, depsKnown)),
 });
 
 /** What the tip and the screen reader say about a dot. */
@@ -126,7 +126,7 @@ export function buildDots(
         id: f.id, title: f.title, owner: f.owner, sizeMB: mb ?? 0, sized: mb !== undefined, credits: creditsPerMonth(mb ?? 0, input.attached?.get(f.id)),
         kind: mb !== undefined ? 'sized' : 'pending', candidate: false, staleness: 0.5,
         usedBy: 0, lastUsedDaysAgo: null, daysSinceUpdate: timed ? Math.max(0, Math.floor((now - (f.modified as number)) / DAY)) : 0,
-        nSvc: 1, why: 'Still being read', view: f.isView || undefined,
+        nSvc: 1, why: translate('scan.map.still-reading'), view: f.isView || undefined,
       } satisfies Dot;
     });
     stats = { found: found.length, staleServices: 0, credits: 0, sizeMB: 0 };

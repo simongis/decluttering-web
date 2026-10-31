@@ -198,6 +198,11 @@ Checks: `npm run typecheck && npm run lint && npm test && npm run e2e`.
 
 ## Version
 
+**1.2.0** (31 October 2026):
+- **Spanish.** The app now comes in Español as well as English, contributed by Aitor Calero (@aitorcalero). It follows your ArcGIS Online language, and you can change it in the account menu. Owner emails stay in English for now. See `CONTRIBUTING.md` to add a language.
+- **Content status filters.** Authoritative items are left out by default; deprecated items are included, and you can switch them off (issue #2).
+- **Hover tips always on top,** in both looks.
+
 **1.1.0** (31 October 2026):
 - **Attachments are priced as file storage.** Layers with lots of photos or documents no longer look far more expensive than they are (see [How credits are worked out](#2-review-you-see-exactly-why)). No extra requests to your org; saved scans refresh their figures in the background on the next rescan.
 - **JLP theme.** A switch at the top right, beside About, turns on an optional retro console look, with charts to match. Your choice is remembered in this browser; the switch turns it back off. Emails are not affected.
@@ -214,7 +219,7 @@ Checks: `npm run typecheck && npm run lint && npm test && npm run e2e`.
 
 ## Contributing and support
 
-Contributions and collaboration are welcome. If you're an ArcGIS Online admin, the most useful thing you can do is try it on your own org and say what worked, what didn't, and what you'd want next. Bug reports, ideas, wording fixes and pull requests are all welcome on this repository's **Issues** page. For anything bigger, open an issue first so we can talk it through. If you'd like to collaborate more closely, reach out on [LinkedIn](https://www.linkedin.com/in/simongis/).
+Contributions and collaboration are welcome. If you're an ArcGIS Online admin, the most useful thing you can do is try it on your own org and say what worked, what didn't, and what you'd want next. Bug reports, ideas, wording fixes and pull requests are all welcome on this repository's **Issues** page. For anything bigger, open an issue first so we can talk it through. If you'd like to collaborate more closely, reach out on [LinkedIn](https://www.linkedin.com/in/simongis/). See `CONTRIBUTING.md` for how to set up, write copy, and add or improve a language.
 
 Decluttering is offered as is, without formal support. For security issues, see `SECURITY.md`.
 

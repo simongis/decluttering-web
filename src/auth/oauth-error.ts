@@ -2,11 +2,14 @@
  * Friendly sign-in failure text. ADR 0013 decision 8: an org that restricts sign-in to approved apps may need an admin to
  * approve this one. We have not seen the error ArcGIS shows for that, so this is the fallback, not a mapped code.
  */
-export const APPROVAL_MESSAGE =
-  "Sign-in didn't finish. Some organisations only allow apps their administrator has approved. If that's yours, the guide on the About page shows what to ask for, then try again.";
+import { onLocaleChange, t } from '../i18n';
 
-/** The person said no on the ArcGIS page (`access_denied`). */
-export const DECLINED_MESSAGE = "No problem, nothing was shared. Sign in again whenever you're ready.";
+export let APPROVAL_MESSAGE = t('auth.oauth.approval');
+export let DECLINED_MESSAGE = t('auth.oauth.declined');
+onLocaleChange(() => {
+  APPROVAL_MESSAGE = t('auth.oauth.approval');
+  DECLINED_MESSAGE = t('auth.oauth.declined');
+});
 
 export interface OAuthReturn { error: string; description: string }
 
@@ -20,8 +23,9 @@ export function parseOAuthError(search: string): OAuthReturn | null {
 
 /** Pure mapping: `access_denied` is a calm "no problem"; anything else gets the approved-apps text, ArcGIS detail in brackets. */
 export function oauthMessageFor(code: string | undefined, detail: string): string {
-  if (code === 'access_denied') return DECLINED_MESSAGE;
-  return detail ? `${APPROVAL_MESSAGE} (${detail})` : APPROVAL_MESSAGE;
+  if (code === 'access_denied') return t('auth.oauth.declined');
+  const message = t('auth.oauth.approval');
+  return detail ? `${message} (${detail})` : message;
 }
 
 export function oauthErrorMessage(e: unknown): string {

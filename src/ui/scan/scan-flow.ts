@@ -9,6 +9,8 @@
 // People stay on Scan until they choose: nothing here moves them to the review except their own click, a stop after the
 // core, or the cached fast path.
 
+import { t } from '../../i18n';
+
 export type FlowState = 'idle' | 'scanning' | 'background' | 'done' | 'stopped' | 'error';
 export type FlowView = 'scan' | 'review';
 
@@ -67,10 +69,10 @@ export const STOP_KEEP = 'Stop and review what we have';
 
 export function scanActions(state: FlowState): ScanActions {
   switch (state) {
-    case 'scanning': return { primary: null, stop: STOP_EARLY, retry: false };
-    case 'background': return { primary: { label: REVIEW_NOW, helper: REVIEW_NOW_HELPER }, stop: STOP_KEEP, retry: false };
-    case 'done': return { primary: { label: SEE_RESULTS }, stop: null, retry: false };
-    case 'stopped': return { primary: { label: SEE_RESULTS }, stop: null, retry: false, resume: RESUME_SCAN };
+    case 'scanning': return { primary: null, stop: t('scan.flow.stop-early'), retry: false };
+    case 'background': return { primary: { label: t('scan.flow.review-now'), helper: t('scan.flow.review-helper') }, stop: t('scan.flow.stop-review'), retry: false };
+    case 'done': return { primary: { label: t('scan.flow.see-results') }, stop: null, retry: false };
+    case 'stopped': return { primary: { label: t('scan.flow.see-results') }, stop: null, retry: false, resume: t('scan.flow.resume') };
     case 'error': return { primary: null, stop: null, retry: true };
     default: return { primary: null, stop: null, retry: false };
   }

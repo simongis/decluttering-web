@@ -6,6 +6,8 @@
 //    goes to the signed-in admin only, and only once the admin has turned sending on.
 //  - Signed in, any other org: no notifier at all; writing and previewing still work.
 import { LitElement, html, type PropertyValues } from 'lit';
+import { t } from '../i18n';
+import { LocaleController } from '../i18n/controller';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { ArcGISIdentityManager } from '@esri/arcgis-rest-request';
 import { createSessionNotifier, WritesDisabled, type GroupNotifier } from '../notify';
@@ -36,6 +38,7 @@ export interface EmailsHostProps {
 
 @customElement('app-emails')
 export class AppEmails extends LitElement {
+  private readonly _locale = new LocaleController(this);
   @property({ type: Boolean }) demo = false;
   @property({ attribute: false }) manager: ArcGISIdentityManager | null = null;
   @property({ attribute: false }) admin: Admin = DEMO_ADMIN;
@@ -128,9 +131,9 @@ export class AppEmails extends LitElement {
     const back = () => go(this.demo ? 'demo' : 'review');
     if (!sel || !sel.items.length) {
       return html`<section data-page="emails" data-empty>
-        <h1>Write the emails</h1>
-        <p>Nobody is ticked yet. Tick an owner’s items on the review first.</p>
-        <calcite-button data-action="emails-back" icon-start="arrow-left" @click=${back}>Back to review</calcite-button>
+        <h1>${t('emails.empty.heading')}</h1>
+        <p>${t('emails.empty.body')}</p>
+        <calcite-button data-action="emails-back" icon-start="arrow-left" @click=${back}>${t('emails.back.review')}</calcite-button>
       </section>`;
     }
     return html`<dc-emails data-page="emails" .owners=${this.ownersFor(sel)} .admin=${this.admin} .org=${{ name: this.orgName }}

@@ -68,6 +68,8 @@ export interface SimItem {
   lastViewed?: number | null;
   /** DC-083: services only. Views all time. */
   numViews?: number;
+  /** GH-2: services only. Esri's content status badge, e.g. 'deprecated'. */
+  contentStatus?: string;
 }
 
 export interface SimulatedOrg {
@@ -293,6 +295,16 @@ export function createSimulatedOrg(partial: Partial<SimulatedOrgConfig> = {}): S
     s.lastViewed = ago === null ? null : Math.min(clock(), anchor - ago * DAY + Math.floor(vr() * 24) * HOUR);
     s.numViews = Math.max(0, Math.round((VIEWS[kind] ?? 20) * Math.exp(1.3 * (vr() + vr() + vr() - 1.5)) * (s.typeKeywords.includes('View Service') ? 0.3 : 1)));
   }
+  // GH-2: a few idle layers the org has already marked deprecated, and a few authoritative ones (reference data that is
+  // rarely touched). Own stream, so nothing else a seed made moves.
+  const cr = seeded(config.seed + 4242);
+  for (const s of services) {
+    const kind = kindOf.get(s.id) ?? 'dead';
+    if ((kind !== 'dead' && kind !== 'rare') || s.typeKeywords.includes('View Service')) continue;
+    const r = cr();
+    if (r < 0.15) s.contentStatus = 'deprecated';
+    else if (r < 0.2) s.contentStatus = 'org_authoritative';
+  }
 
   // DC-086: a recent sweep, the way a script or crawler does it: on day 4 at 03:00 UTC it asked most layers that had been
   // opened before for their data, a request or two each, which also moved their lastViewed to that hour (live check L1).
@@ -366,6 +378,7 @@ export function createSimulatedOrg(partial: Partial<SimulatedOrgConfig> = {}): S
     ownerFolder: folderOf.get(s.id) ?? null,
     ...(s.numViews !== undefined ? { numViews: s.numViews } : {}),
     ...(s.lastViewed !== undefined ? { lastViewed: s.lastViewed } : {}),
+    ...(s.contentStatus ? { contentStatus: s.contentStatus } : {}),
   });
   const page = <T>(rows: T[], params: Record<string, string | number>, key: string, map: (x: T) => unknown): Json => {
     const num = Math.max(1, Math.min(100, Number(params.num) || 10));

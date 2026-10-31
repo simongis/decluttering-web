@@ -1,5 +1,7 @@
 import { LitElement, html, nothing, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { LocaleController } from '../../i18n/controller';
+import { t } from '../../i18n';
 import '@esri/calcite-components/dist/components/calcite-block';
 import '@esri/calcite-components/dist/components/calcite-button';
 import '@esri/calcite-components/dist/components/calcite-chip';
@@ -16,7 +18,7 @@ import '../scan/dc-dot-map';
 import type { DotModel } from '../scan/dots';
 import { readChartOpen, readChartView, reviewDots, writeChartOpen, writeChartView, zoneName, type ChartView } from './review-dots';
 import type { Data, EvaluateResult, Org, OwnerGroup, Thresholds } from '../../domain/types';
-import { PRESETS, PRESET_NAMES, evaluate, matchPreset, sizeChangeImpact, sweepsOf, type PresetName, type SizeImpact } from '../../domain/stale';
+import { PRESETS, PRESET_NAMES, evaluate, matchPreset, sizeChangeImpact, statusToggles, sweepsOf, type PresetName, type SizeImpact } from '../../domain/stale';
 import { suggest, type Suggestion } from '../../domain/suggest';
 import { sweepNote, sweepSummary } from '../../domain/sweep';
 import { fmtInt, formatMB, itemUrl } from '../../domain/format';
@@ -46,8 +48,7 @@ const sameT = (a: Thresholds, b: Thresholds) => T_KEYS.every((k) => (a[k] ?? 0) 
 export const SOLO_NOTE = "You're the only owner here, so there's no one to nudge. Here's your own list to tidy, biggest first.";
 
 const appLink = () => location.origin + location.pathname.replace(/[^/]*$/, '');
-const adminNote = () =>
-  `Hi, I have been using Decluttering to look over my own hosted feature layers in ArcGIS Online. It can help all of us tidy up: it sends each owner one friendly email, and it never deletes anything. Would you have a look when you have a minute? ${appLink()}`;
+const adminNote = () => t('review.admin.note', { url: appLink() });
 
 /**
  * The review screen: summary, filters, owner list (or one list in member mode), "No one to nudge".
@@ -60,6 +61,7 @@ const adminNote = () =>
  */
 @customElement('dc-review')
 export class DcReview extends LitElement {
+  private readonly _locale = new LocaleController(this);
   @property({ attribute: false }) data!: Data;
   @property({ attribute: false }) org!: Org;
   @property() mode: ReviewMode = 'admin';
@@ -184,7 +186,7 @@ export class DcReview extends LitElement {
     const follow = this.pick === 'suggested' && prev && sameT(this.thresholds, prev.thresholds);
     if (next && (this.pick === '' || follow)) {
       this.pick = 'suggested';
-      if (!sameT(this.thresholds, next.thresholds)) this.setThresholds({ ...next.thresholds });
+      if (!sameT(this.thresholds, next.thresholds)) this.setThresholds({ ...next.thresholds, ...statusToggles(this.thresholds) });
     } else if (!next && this.pick === 'suggested') {
       this.pick = '';
     }
@@ -250,12 +252,12 @@ export class DcReview extends LitElement {
   }
 
   private sortControl() {
-    const opts: [SortKey, string][] = [['priority', 'Priority'], ['credits', 'Credits'], ['updated', 'Last updated'], ['views', 'Least viewed']];
+    const opts: [SortKey, string][] = [['priority', t('review.sort.priority')], ['credits', t('review.sort.credits')], ['updated', t('review.sort.updated')], ['views', t('review.sort.views')]];
     return html`<div class="list-tools">
       <calcite-button scale="s" appearance=${this.startOnly ? 'solid' : 'outline'} kind="brand" icon-start="check" aria-pressed=${this.startOnly ? 'true' : 'false'}
-        label="Quick wins only: show only the biggest, safest tidy-ups" title="Show only the biggest, safest tidy-ups" @click=${() => { this.startOnly = !this.startOnly; }}>Quick wins only</calcite-button>
-      <div class="sort-ctl"><span>Sort</span>
-        <calcite-segmented-control scale="s" label="Sort" @calciteSegmentedControlChange=${(e: Event) => { this.sort = (e.target as HTMLInputElement).value as SortKey; this.sortPicked = true; }}>
+        label=${t('review.sort.quickLabel')} title=${t('review.sort.quickTitle')} @click=${() => { this.startOnly = !this.startOnly; }}>${t('review.sort.quickOnly')}</calcite-button>
+      <div class="sort-ctl"><span>${t('review.sort.label')}</span>
+        <calcite-segmented-control scale="s" label=${t('review.sort.label')} @calciteSegmentedControlChange=${(e: Event) => { this.sort = (e.target as HTMLInputElement).value as SortKey; this.sortPicked = true; }}>
           ${opts.map(([k, label]) => html`<calcite-segmented-control-item value=${k} ?checked=${this.activeSort === k}>${label}</calcite-segmented-control-item>`)}
         </calcite-segmented-control></div>
     </div>`;
@@ -265,7 +267,7 @@ export class DcReview extends LitElement {
     const text = adminNote();
     let ok = false;
     try { await navigator.clipboard.writeText(text); ok = true; } catch { /* fall through */ }
-    this.toast = ok ? 'Copied. Paste it into an email or chat.' : 'We could not copy that. Select the note and copy it yourself.';
+    this.toast = ok ? t('review.nudge.copied') : t('review.nudge.copyFailed');
   }
 
   /** DC-096: username to the chip's extra words ("2 of 4 gone"). */
@@ -288,18 +290,18 @@ export class DcReview extends LitElement {
       const rows = owners.flatMap((o) => o.rows).filter((r) => !this.done.has(r.source.id));
       const n = sumSvc(rows);
       const partial = rows.some((r) => !r.sizeKnown);
-      return html`${this.fig('f-svc', 'feature-layer', fmtInt(n), n === 1 ? 'layer' : 'layers')}
-        ${this.fig('f-own', 'data', formatMB(rows.reduce((a, r) => a + r.sizeMB, 0)), partial ? 'storage so far' : 'storage')}
-        ${this.fig('f-cred', 'credit-card', credit(rows.reduce((a, r) => a + r.credits, 0)), partial ? 'credits a month so far' : 'credits a month')}`;
+      return html`${this.fig('f-svc', 'feature-layer', fmtInt(n), t(n === 1 ? 'review.unit.layer' : 'review.unit.layers'))}
+        ${this.fig('f-own', 'data', formatMB(rows.reduce((a, r) => a + r.sizeMB, 0)), t(partial ? 'review.fig.storageSoFar' : 'review.fig.storage'))}
+        ${this.fig('f-cred', 'credit-card', credit(rows.reduce((a, r) => a + r.credits, 0)), t(partial ? 'review.fig.creditsMonthSoFar' : 'review.fig.creditsMonth'))}`;
     }
     const svc = owners.reduce((n, o) => n + sumSvc(o.rows), 0);
     const credits = owners.reduce((n, o) => n + o.credits, 0);
     const ticked = owners.filter((o) => o.rows.some((r) => itemOn(this.items, o, r))).length;
-    return html`${this.fig('f-svc', 'feature-layer', fmtInt(svc), svc === 1 ? 'service' : 'services')}
+    return html`${this.fig('f-svc', 'feature-layer', fmtInt(svc), t(svc === 1 ? 'review.unit.service' : 'review.unit.services'))}
       ${this.selectable
-        ? this.fig('f-own', 'users', fmtInt(ticked), owners.length === 1 ? 'owner' : 'owners', html`<span class="of">of ${fmtInt(owners.length)}</span>`)
-        : this.fig('f-own', 'users', fmtInt(owners.length), owners.length === 1 ? 'owner to review' : 'owners to review')}
-      ${this.fig('f-cred', 'credit-card', credit(credits), owners.some((o) => o.unmeasured) ? 'credits a month so far' : 'credits a month')}`;
+        ? this.fig('f-own', 'users', fmtInt(ticked), t(owners.length === 1 ? 'review.unit.owner' : 'review.unit.owners'), html`<span class="of">${t('review.review.of', { count: fmtInt(owners.length) })}</span>`)
+        : this.fig('f-own', 'users', fmtInt(owners.length), t(owners.length === 1 ? 'review.unit.ownerReview' : 'review.unit.ownersReview'))}
+      ${this.fig('f-cred', 'credit-card', credit(credits), t(owners.some((o) => o.unmeasured) ? 'review.fig.creditsMonthSoFar' : 'review.fig.creditsMonth'))}`;
   }
 
   /**
@@ -309,8 +311,8 @@ export class DcReview extends LitElement {
   private useNote() {
     if (!this.canSeeUsage || !this.data) return nothing;
     const old = this.data.services.length > 0 && this.data.services.every((s) => s.lastViewed === undefined);
-    if (old) return this.note('use-note', 'information', 'This older scan has no last-viewed dates, so last used is from data requests only. Scan again to add them.', { note: 'requests-only' });
-    if (this.data.usageComplete === false) return this.note('use-note', 'information', 'Some usage history couldn\'t be read. Layers we can\'t be sure about show "Last used: unknown" and stay off the list.', { note: 'usage-partial' });
+    if (old) return this.note('use-note', 'information', t('review.notes.oldScan'), { note: 'requests-only' });
+    if (this.data.usageComplete === false) return this.note('use-note', 'information', t('review.notes.partialUsage'), { note: 'usage-partial' });
     return nothing;
   }
 
@@ -331,9 +333,7 @@ export class DcReview extends LitElement {
     const n = owners.reduce((a, o) => a + o.unmeasured, 0);
     if (!n) return nothing;
     const what = plural(n, 'item', 'items');
-    return this.note('sizes-note', this.stopped ? 'information' : 'clock', this.stopped
-      ? `Storage not measured for ${what}, so credits count only the ones measured.`
-      : `Still measuring storage for ${what}. Credits so far count only the ones measured.`, { note: 'sizes', unmeasured: String(n) });
+    return this.note('sizes-note', this.stopped ? 'information' : 'clock', t(this.stopped ? 'review.notes.storageStopped' : 'review.notes.storageMeasuring', { items: what }), { note: 'sizes', unmeasured: String(n) });
   }
 
   /** DC-090 (finding 5): a status note is a plain line with an icon inside the summary, under the figures. */
@@ -345,7 +345,7 @@ export class DcReview extends LitElement {
   private depsNote() {
     if (this.depsKnown) return nothing;
     return this.note('deps-note', this.stopped ? 'information' : 'clock', this.stopped
-      ? 'Not every map and app was checked, so “used by” may miss some.' : 'Still checking which maps use these…');
+      ? t('review.notes.depsStopped') : t('review.notes.depsChecking'));
   }
 
   /** DC-090 (FB-40): one chart card, How stale (the scan's dot map, default) | By owner (the Sankey). */
@@ -354,15 +354,15 @@ export class DcReview extends LitElement {
     const inZone = m?.stats.staleServices ?? 0;
     const setView = (v: ChartView) => { if (v === this.chartView) return; this.chartPick = v; writeChartView(v, this.org?.id); };
     return html`<calcite-block class="chart-block" data-chart-view=${view} collapsible ?expanded=${this.chartOpen}
-      heading=${view === 'stale' ? 'How stale' : 'Stale items by owner'}
+      heading=${t(view === 'stale' ? 'review.chart.howStale' : 'review.chart.byOwner')}
       description=${view === 'stale'
-        ? `${plural(inZone, 'service', 'services')} in the stale zone`
-        : 'Credits a month from stale items only. Top 10 owners.'}
+        ? t('review.chart.staleDescription', { count: inZone })
+        : t('review.chart.ownerDescription')}
       @calciteBlockToggle=${(e: Event) => { if (e.target !== e.currentTarget) return; const open = !!(e.target as HTMLElement & { expanded: boolean }).expanded; this.chartOpen = open; writeChartOpen(open); }}>
-      <calcite-segmented-control slot="actions-end" scale="s" label="Chart" data-action="chart-view"
+      <calcite-segmented-control slot="actions-end" scale="s" label=${t('review.chart.label')} data-action="chart-view"
         @calciteSegmentedControlChange=${(e: Event) => { e.stopPropagation(); setView((e.target as HTMLElement & { value: string }).value === 'owner' ? 'owner' : 'stale'); }}>
-        <calcite-segmented-control-item value="stale" ?checked=${view === 'stale'}>How stale</calcite-segmented-control-item>
-        <calcite-segmented-control-item value="owner" ?checked=${view === 'owner'}>By owner</calcite-segmented-control-item>
+        <calcite-segmented-control-item value="stale" ?checked=${view === 'stale'}>${t('review.chart.howStale')}</calcite-segmented-control-item>
+        <calcite-segmented-control-item value="owner" ?checked=${view === 'owner'}>${t('review.sankey.byOwner')}</calcite-segmented-control-item>
       </calcite-segmented-control>
       <div class="chart-view" data-view="stale" ?hidden=${view !== 'stale'}>
         ${m ? html`<dc-dot-map .model=${m} .org=${this.org} .thresholds=${this.dotsT ?? this.effective()} .lenses=${STALE_ONLY} .zoneLabel=${zoneName(shown)}
@@ -376,34 +376,34 @@ export class DcReview extends LitElement {
     const un = ev.unreachable;
     if (!un.length) return nothing;
     const n = un.reduce((a, g) => a + g.rows.length, 0);
-    return html`<calcite-block class="unreach" heading="No one to nudge" collapsible expanded
-      description="${plural(un.length, 'owner', 'owners')} · ${plural(n, 'item', 'items')}, admin only">
+    return html`<calcite-block class="unreach" heading=${t('review.unreachable.heading')} collapsible expanded
+      description=${t('review.unreachable.description', { owners: plural(un.length, 'owner', 'owners'), items: plural(n, 'item', 'items') })}>
       <calcite-icon slot="icon" icon="user-x" scale="s"></calcite-icon>
-      <p class="unreach-note">Disabled accounts can't get email. Reassign or review these items in ArcGIS Online.</p>
+      <p class="unreach-note">${t('review.unreachable.disabled')}</p>
       <div class="unreach-list">${un.map((g) => html`<div class="un-owner">
         <div class="un-head"><calcite-icon preload icon="user-x" scale="s"></calcite-icon><strong>${g.owner.fullName}</strong><span class="muted small">${g.owner.username}</span>
-          <calcite-chip class="c-inactive" scale="s" appearance="outline-fill" kind="neutral" label="Account disabled">Account disabled</calcite-chip></div>
-        <ul class="un-items">${g.rows.map((r) => html`<li><calcite-link href=${itemUrl(this.org, r.source)} target="_blank" rel="noopener" icon-end="launch">${r.source.title}</calcite-link><span class="muted small"> ${r.sizeKnown ? `${formatMB(r.sizeMB)} · ≈ ${credit(r.credits)} credits a month` : saySize(r, this.stopped)}</span></li>`)}</ul>
+          <calcite-chip class="c-inactive" scale="s" appearance="outline-fill" kind="neutral" label=${t('review.unreachable.accountDisabled')}>${t('review.unreachable.accountDisabled')}</calcite-chip></div>
+        <ul class="un-items">${g.rows.map((r) => html`<li><calcite-link href=${itemUrl(this.org, r.source)} target="_blank" rel="noopener" icon-end="launch">${r.source.title}</calcite-link><span class="muted small"> ${r.sizeKnown ? `${formatMB(r.sizeMB)} · ≈ ${credit(r.credits)} ${t('review.fig.creditsMonth')}` : saySize(r, this.stopped)}</span></li>`)}</ul>
       </div>`)}</div>
     </calcite-block>`;
   }
 
   private nudgePanel() {
-    return html`<calcite-block class="nudge" heading="Tidying with the whole team?" expanded>
+    return html`<calcite-block class="nudge" heading=${t('review.nudge.heading')} expanded>
       <calcite-icon slot="icon" icon="group" scale="s"></calcite-icon>
       <div class="block-pad">
-        <p class="mi-p">Your admin can use Decluttering to help everyone tidy up, with one friendly email per person and nothing ever deleted.</p>
-        <calcite-button icon-start="copy" appearance="outline" width="full" @click=${() => this.copyNote()}>Copy a note for your admin</calcite-button>
-        <p class="hint">Nothing is sent. You paste the note into an email or chat yourself.</p>
+        <p class="mi-p">${t('review.nudge.body')}</p>
+        <calcite-button icon-start="copy" appearance="outline" width="full" @click=${() => this.copyNote()}>${t('review.nudge.copy')}</calcite-button>
+        <p class="hint">${t('review.nudge.hint')}</p>
         ${this.toast ? html`<calcite-notice open scale="s" kind="success" icon="check-circle" class="toast"><div slot="message">${this.toast}</div></calcite-notice>` : nothing}
       </div>
     </calcite-block>`;
   }
 
   private emptyState() {
-    return html`<div class="empty"><calcite-icon preload icon="feature-layer" scale="l"></calcite-icon><h2>All tidy at these settings</h2>
-      <p class="lede">Try Strict to see more, or change a setting on the left.</p>
-      <calcite-button appearance="outline" @click=${() => this.setThresholds({ ...PRESETS.strict })}>Try Strict</calcite-button></div>`;
+    return html`<div class="empty"><calcite-icon preload icon="feature-layer" scale="l"></calcite-icon><h2>${t('review.empty.heading')}</h2>
+      <p class="lede">${t('review.empty.body')}</p>
+      <calcite-button appearance="outline" @click=${() => this.setThresholds({ ...PRESETS.strict })}>${t('review.empty.strict')}</calcite-button></div>`;
   }
 
   override render() {
@@ -416,8 +416,8 @@ export class DcReview extends LitElement {
     const rowsCount = owners.flatMap((o) => o.rows).length;
     const fo = personal ? undefined : owners.find((o) => o.owner.username === this.filterOwner);
     const heading = personal
-      ? (rowsCount ? `${plural(sumSvc(owners.flatMap((o) => o.rows)), 'layer', 'layers')} to look over` : 'Nothing to review')
-      : (owners.length ? `${plural(filtered.length, 'owner', 'owners')} · ${plural(filtered.reduce((s, o) => s + sumSvc(o.rows), 0), 'service', 'services')}` : 'Nothing to review');
+      ? (rowsCount ? t('review.review.layersToReview', { count: sumSvc(owners.flatMap((o) => o.rows)) }) : t('review.review.nothing'))
+      : (owners.length ? `${plural(filtered.length, 'owner', 'owners')} · ${plural(filtered.reduce((s, o) => s + sumSvc(o.rows), 0), 'service', 'services')}` : t('review.review.nothing'));
     const shown = this.shown;
     const filters = html`<dc-filters .thresholds=${this.thresholds} .canSeeUsage=${this.canSeeUsage} ?member=${member}
       .suggestion=${this.sug} .selected=${shown} .sizeImpact=${this.sizeImpact}
@@ -431,12 +431,12 @@ export class DcReview extends LitElement {
     const notes = [this.depsNote(), this.sizesNote(owners), this.useNote(), this.sweepNote()].filter((n) => n !== nothing);
 
     return html`<div class="dc-review-grid ${member ? 'mi-grid' : ''} ${this.solo ? 'solo-grid' : ''}" data-panel-open=${String(this.panelOpen)}>
-      <header class="pagehead"><h1>${member ? 'Your hosted feature layers' : 'Review'}</h1><div class="pagehead-ctx"></div></header>
-      <aside class="dc-review-side" aria-label="Stale rules">
+      <header class="pagehead"><h1>${t(member ? 'review.headline.member' : 'review.headline.review')}</h1><div class="pagehead-ctx"></div></header>
+      <aside class="dc-review-side" aria-label=${t('review.aria.staleRules')}>
         <button type="button" class="panel-fold" aria-expanded=${String(this.panelOpen)} @click=${() => { this.panelOpen = !this.panelOpen; }}>
           <calcite-icon icon="sliders-horizontal" scale="s" aria-hidden="true"></calcite-icon>
-          <span class="pf-text"><b>What counts as stale?</b> · ${PRESET_NAMES[shown]}</span>
-          <span class="pf-act">${this.panelOpen ? 'Close' : 'Change'}</span>
+          <span class="pf-text"><b>${t('review.whatStale')}</b> · ${PRESET_NAMES[shown]}</span>
+          <span class="pf-act">${t(this.panelOpen ? 'review.action.close' : 'review.action.change')}</span>
         </button>
         ${filters}
       </aside>
@@ -444,22 +444,22 @@ export class DcReview extends LitElement {
         ${!member && this.since ? html`<dc-since-nudges .since=${this.since} .org=${this.org} .owners=${this.data.owners}></dc-since-nudges>` : nothing}
         <section class="summary" aria-labelledby="summary-h">
           <div class="sum-top">
-            <h2 id="summary-h">${personal ? 'Ready for a look' : 'Ready to review'} <span class="ctx">· ${PRESET_NAMES[shown]}</span></h2>
-            <ul class="chips" aria-label="What was found">${this.figures(owners)}</ul>
+            <h2 id="summary-h">${t(personal ? 'review.summary.readyLook' : 'review.summary.readyReview')} <span class="ctx">· ${PRESET_NAMES[shown]}</span></h2>
+            <ul class="chips" aria-label=${t('review.summary.found')}>${this.figures(owners)}</ul>
           </div>
-          ${notes.length ? html`<div role="status" aria-label="About these numbers"><ul class="notes">${notes}</ul></div>` : nothing}
+          ${notes.length ? html`<div role="status" aria-label=${t('review.summary.numbers')}><ul class="notes">${notes}</ul></div>` : nothing}
         </section>
-        ${this.mode === 'admin-cant-send' ? html`<calcite-notice open icon="information" kind="brand"><div slot="message">Your role can't create groups, so you can review but not send emails. Ask your administrator for the create groups privilege.</div></calcite-notice>` : nothing}
-        ${this.solo ? html`<calcite-notice open icon="information" kind="brand" data-note="solo"><div slot="message">${SOLO_NOTE}</div></calcite-notice>` : nothing}
+        ${this.mode === 'admin-cant-send' ? html`<calcite-notice open icon="information" kind="brand"><div slot="message">${t('review.cantSend')}</div></calcite-notice>` : nothing}
+        ${this.solo ? html`<calcite-notice open icon="information" kind="brand" data-note="solo"><div slot="message">${t('review.solo.note')}</div></calcite-notice>` : nothing}
         ${member ? nothing : this.chartCard(shown)}
         <div class="list-head"><h2>${heading}</h2>
-          ${fo ? html`<calcite-chip closable scale="m" appearance="outline-fill" kind="brand" @calciteChipClose=${() => { this.filterOwner = null; }}>Owner: ${fo.owner.fullName}</calcite-chip>` : nothing}</div>
+          ${fo ? html`<calcite-chip closable scale="m" appearance="outline-fill" kind="brand" @calciteChipClose=${() => { this.filterOwner = null; }}>${t('review.label.owner', { name: fo.owner.fullName })}</calcite-chip>` : nothing}</div>
         ${everyone.length ? this.sortControl() : nothing}
-        ${startNone ? html`<p class="lede">No Quick wins at these settings. Turn off Quick wins only to see everything.</p>` : nothing}
+        ${startNone ? html`<p class="lede">${t('review.sort.noneQuick')}</p>` : nothing}
         ${list}
         ${member ? nothing : this.unreachable(ev)}
       </div>
-      ${member ? html`<aside class="mi-side" aria-label="Share with your admin">${this.nudgePanel()}</aside>` : nothing}
+      ${member ? html`<aside class="mi-side" aria-label=${t('review.nudge.shareAria')}>${this.nudgePanel()}</aside>` : nothing}
     </div>`;
   }
 

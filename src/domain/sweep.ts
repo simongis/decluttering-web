@@ -3,6 +3,7 @@
 // when working out last used (docs/research/usage-signals-deep-dive.md 6.2, 6.3). Pure TS: no DOM.
 import type { Family, Service } from './types';
 import { DAY, fmtDate } from './format';
+import { t, tn } from '../i18n';
 
 /*
  * JUDGEMENT values, calibrated on one big org's cached scan (6,812 layers, anonymised counts): 15 days in the year had
@@ -98,12 +99,11 @@ export function sweepSummary(sw: Sweeps, ref: number): SweepSummary | null {
 /** The calm note for the review header and the scan's finish line, and its one action (DC-086, tone guide). */
 export function sweepNote(s: SweepSummary, counting: boolean): { text: string; action: string } {
   const others = s.dates - 1;
-  const when = others ? `On ${s.latest} and ${others} other ${others === 1 ? 'day' : 'days'}` : `On ${s.latest}`;
-  const lead = `${when}, a script or crawler likely touched many layers at once.`;
+  const when = others ? tn(others === 1 ? 'domain.sweep.when.one' : 'domain.sweep.when.other', others, { date: s.latest, count: String(others) }) : t('domain.sweep.when', { date: s.latest });
   return counting
-    ? { text: `${lead} Those days count as use, as you asked.`, action: 'Set them aside' }
-    : { text: `${lead} Last used skips those light touches.`, action: 'Count them' };
+    ? { text: t('domain.sweep.counting', { when }), action: t('domain.sweep.action.setAside') }
+    : { text: t('domain.sweep.notCounting', { when }), action: t('domain.sweep.action.count') };
 }
 
 /** One sentence for the "Last used" info popover. */
-export const SWEEP_INFO = 'When many layers were touched on the same day with a request or two each, that is usually a script or crawler, so we set those light touches aside (a layer with more than 10 requests that day still counts). The note above the list lets you count them back in.';
+export const SWEEP_INFO = t('domain.sweep.info');
