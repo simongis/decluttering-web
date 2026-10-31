@@ -2,7 +2,7 @@
 import type { Option, OwnerGroup, Row, Thresholds } from '../../domain/types';
 import { describe, lastUsedWords, span, viewsWords } from '../../domain/stale';
 import { fmtMonthYear, formatMB } from '../../domain/format';
-import { plural } from '../shared/text';
+import { credit, plural } from '../shared/text';
 
 /** Tick state: items, not owners, carry the tick. A recently nudged owner starts with every item unticked. */
 export const itemOn = (items: ReadonlyMap<string, boolean>, o: OwnerGroup, r: Row): boolean =>
@@ -40,6 +40,12 @@ export function sayWhy(row: WhyRow, canSeeUsage: boolean, depsKnown = true, stop
 /** The size chip: "2 MB" or "14.6 MB", or "Size not measured yet" while sizing runs, "Size not measured" after a stop (DC-053). */
 export const saySize = (row: Pick<Row, 'sizeMB' | 'sizeKnown'>, stopped = false): string =>
   row.sizeKnown ? formatMB(row.sizeMB) : stopped ? 'Size not measured' : 'Size not measured yet';
+
+/** The credit chip's label and tooltip. DC-134: names the attachments when there are some, since they cost far less per MB. */
+export const sayCredits = (row: Pick<Row, 'credits' | 'attachmentMB'>): string =>
+  `About ${credit(row.credits)} credits a month` + (row.attachmentMB >= 0.05
+    ? `. Includes ${formatMB(row.attachmentMB)} of attachments, billed as file storage at a much lower rate.`
+    : '');
 
 export interface SparkBar { x: number; y: number; h: number; zero: boolean }
 export interface SparkGeometry { width: number; height: number; bars: SparkBar[]; total: number }

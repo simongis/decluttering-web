@@ -49,10 +49,15 @@ export type ScanTap =
   | { kind: 'found'; items: { id: string; title: string; owner: string; url?: string; modified?: number; created?: number; isView?: boolean; lastViewed?: number | null }[] }
   /** DC-071c: one usage window as it lands (data requests per day per service name), so the map can place dots early. */
   | { kind: 'usage'; endTime: number; rows: { name: string; num: [number, number][] }[] }
-  | { kind: 'sized'; id: string; sizeMB: number }
+  | { kind: 'sized'; id: string; sizeMB: number; /** DC-134: the attachments' MB, when the item has any. */ attachmentMB?: number }
   | { kind: 'read' };
 
 const MB = 1024 * 1024;
+/** DC-134: the attachments' MB from an item's `subInfo`, only when there are some (the tap stays lean for the rest). */
+const attachedOf = (it: unknown): { attachmentMB?: number } => {
+  const b = (it as { subInfo?: unknown } | null)?.subInfo;
+  return typeof b === 'number' && Number.isFinite(b) && b > 0 ? { attachmentMB: b / MB } : {};
+};
 const ITEM = /^content\/items\/([0-9a-zA-Z]+)$/;
 const ITEM_DATA = /^content\/items\/[0-9a-zA-Z]+\/data$/;
 /** DC-071a: an owner's content listing (hybrid sizing) carries real sizes for every item in it. */
@@ -84,13 +89,13 @@ export function tapRequest(request: RequestFn, tap: (e: ScanTap) => void): Reque
         }
       } else if (ITEM.test(path) && res && typeof res === 'object') {
         const n = Number((res as { size?: unknown }).size);
-        tap({ kind: 'sized', id: (ITEM.exec(path) as RegExpExecArray)[1] as string, sizeMB: Number.isFinite(n) && n > 0 ? n / MB : 0 });
+        tap({ kind: 'sized', id: (ITEM.exec(path) as RegExpExecArray)[1] as string, sizeMB: Number.isFinite(n) && n > 0 ? n / MB : 0, ...attachedOf(res) });
       } else if (ITEM_DATA.test(path)) tap({ kind: 'read' });
       else if (USER_CONTENT.test(path) && res && typeof res === 'object') {
         for (const it of ((res as { items?: unknown }).items as Record<string, unknown>[] | undefined) ?? []) {
           const n = Number(it?.size);
           const hosted = it?.type === 'Feature Service' && Array.isArray(it.typeKeywords) && (it.typeKeywords as unknown[]).includes('Hosted Service');
-          if (hosted && it.size !== null && Number.isFinite(n) && n >= 0) tap({ kind: 'sized', id: String(it.id ?? ''), sizeMB: n > 0 ? n / MB : 0 });
+          if (hosted && it.size !== null && Number.isFinite(n) && n >= 0) tap({ kind: 'sized', id: String(it.id ?? ''), sizeMB: n > 0 ? n / MB : 0, ...attachedOf(it) });
         }
       }
     } catch { /* the tap is for display only */ }

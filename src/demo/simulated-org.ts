@@ -40,6 +40,8 @@ export interface SimulatedOrgConfig {
   contention: number;
   /** Per-call base latency in ms (before jitter, speed and contention). */
   latency: { search: number; item: number; data: number; related: number; users: number; usageMin: number; usageMax: number };
+  /** DC-134: share of source layers with attachments (field capture, inspections). Default 0.15; 0 turns them off. */
+  attachmentShare?: number;
   /** Test hook: the clock. Default Date.now. */
   now?: () => number;
   /**
@@ -60,6 +62,8 @@ export interface SimItem {
   created: number; modified: number; access: string; tags: string[]; snippet: string; description: string;
   /** Bytes. */
   size: number;
+  /** DC-134: bytes of `size` that are attachments (the item's `subInfo`), billed as file storage. Sources only. */
+  subInfo?: number;
   /** DC-083: services only. Epoch ms of the last item open or data access (hourly); null is blank ("not since Nov 2022"). */
   lastViewed?: number | null;
   /** DC-083: services only. Views all time. */
@@ -113,6 +117,7 @@ export function createSimulatedOrg(partial: Partial<SimulatedOrgConfig> = {}): S
   const anchor = Math.floor(clock() / DAY) * DAY;
   const rand = seeded(config.seed);
   const calls = seeded(config.seed + 7919); // its own stream: latency and 429 draws never shift the data
+  const att = seeded(config.seed + 104729); // DC-134: attachments get their own stream too, so the rest of the org is unchanged
   const pick = <T>(a: T[]): T => a[Math.floor(rand() * a.length)] as T;
   const hex = (n: number) => Array.from({ length: n }, () => Math.floor(rand() * 16).toString(16)).join('');
   const norm = () => { let u = 0, v = 0; while (!u) u = rand(); while (!v) v = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
@@ -195,6 +200,8 @@ export function createSimulatedOrg(partial: Partial<SimulatedOrgConfig> = {}): S
       description: rand() < (idle ? 0.5 : 0.15) ? '' : `Maintained by the GIS team. Holds ${topic} data.`,
       size: sizeBytes,
     };
+    // DC-134: some layers are mostly photos: 40% to 99% of their storage is attachments.
+    if (!isView && att() < (config.attachmentShare ?? 0.15)) s.subInfo = Math.round(sizeBytes * (0.4 + 0.59 * att()));
     if (source) sourceOf.set(id, source.id);
     if (source && s.created < source.created) s.created = source.created;
     if (source && s.modified < source.created) s.modified = source.created;
@@ -417,7 +424,7 @@ export function createSimulatedOrg(partial: Partial<SimulatedOrgConfig> = {}): S
       if (!mine) return { error: { code: 400, message: 'User does not exist or is inaccessible.', details: [] } };
       if (folder && !mine.some((f) => f.id === folder)) return { error: { code: 400, message: 'Folder does not exist or is inaccessible.', details: [] } };
       const rows = content.get(owner)?.get(folder) ?? [];
-      const res = page(rows, params, 'items', (x) => ({ ...searchRow(x), size: x.size, numViews: x.numViews ?? 0 })) as Json;
+      const res = page(rows, params, 'items', (x) => ({ ...searchRow(x), size: x.size, subInfo: x.subInfo ?? 0, numViews: x.numViews ?? 0 })) as Json;
       return { username: owner, ...res, ...(folder ? { currentFolder: mine.find((f) => f.id === folder) } : { folders: mine.map((f) => ({ ...f, username: owner, created: anchor })) }) };
     }
     const item = /^content\/items\/([0-9a-f]{32})(\/(data|relatedItems))?$/.exec(path);
@@ -438,7 +445,7 @@ export function createSimulatedOrg(partial: Partial<SimulatedOrgConfig> = {}): S
         const src = sourceOf.get(it.id);
         return { total: src ? 1 : 0, relatedItems: src ? [{ id: src }] : [] };
       }
-      return { ...searchRow(it), size: it.size, numViews: it.numViews ?? 0 };
+      return { ...searchRow(it), size: it.size, subInfo: it.subInfo ?? 0, numViews: it.numViews ?? 0 };
     }
     return { error: { code: 404, message: `Unknown endpoint ${path}`, details: [] } };
   }

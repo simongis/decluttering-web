@@ -157,7 +157,12 @@ export interface DependencyResult {
 }
 
 /** What one content/items/{id} call tells us beyond the search result. */
-export interface SizeInfo { sizeMB: number; description?: string; snippet?: string; tags?: string[] }
+export interface SizeInfo {
+  sizeMB: number;
+  /** DC-134: of sizeMB, the attachments (the item's `subInfo`). Absent only on sizes cached before DC-134. */
+  attachmentMB?: number;
+  description?: string; snippet?: string; tags?: string[];
+}
 
 export interface SizeBatch {
   /** Cumulative: service id to its measured size (and fuller metadata). */

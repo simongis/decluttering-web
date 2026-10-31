@@ -72,9 +72,15 @@ You can see and change every number. Starting points fill them in:
 | **Strict** | more than 3 months ago | more than 3 months ago | at most 2 | 10 MB or more |
 | **Suggested** | worked out for your org: the gentlest setting that picks out a manageable list | | | |
 
-Each layer says why it's on the list, roughly what it costs in **credits a month** (storage is 2.4 credits per 10 MB), and how quick a win it is (**Quick win**, **Worth a look** or **Low impact**):
+Each layer says why it's on the list, roughly what it costs in **credits a month**, and how quick a win it is (**Quick win**, **Worth a look** or **Low impact**):
 
 ![An owner's card: each layer with the reason, size, credits a month and priority](docs/images/owner-card.png)
+
+**How credits are worked out.** ArcGIS Online bills a hosted feature layer's data as feature storage (2.4 credits per 10 MB a month), but any attachments on it (photos, PDFs and other files added to features) as file storage, which is far cheaper (1.2 credits per GB a month). A layer's size includes its attachments, so the app prices each part at its own rate. A layer full of photos still shows its full size and stays on the list if it is stale; only its credit figure is lower. Hover the credits to see how much is attachments:
+
+![A layer that is mostly attachments: 34 MB, of which 30 MB are attachments, about 1 credit a month](docs/images/attachment-credits.png)
+
+The figures are estimates for the month. Organization › Status › Storage in ArcGIS Online shows what was actually billed.
 
 **What "last used" means.** It is the newer of two dates ArcGIS Online keeps for a layer and its hosted views: when it was last opened (its item page, Map Viewer, or a map or app that uses it), and the last day its data was requested by anything, including scripts. Days when a crawler touched hundreds of layers at once are set aside. When the app can't be sure, it leans towards "used": a layer whose usage couldn't be fully read is **never** picked out.
 
@@ -191,6 +197,10 @@ Checks: `npm run typecheck && npm run lint && npm test && npm run e2e`.
 [Calcite Design System](https://developers.arcgis.com/calcite-design-system/), [ArcGIS REST JS](https://developers.arcgis.com/arcgis-rest-js/), [Lit](https://lit.dev/), [D3](https://d3js.org/) and [Driver.js](https://driverjs.com/), with Vite and TypeScript. Third-party notices: `LICENSES.md`.
 
 ## Version
+
+**1.1.0** (31 October 2026):
+- **Attachments are priced as file storage.** Layers with lots of photos or documents no longer look far more expensive than they are (see [How credits are worked out](#2-review-you-see-exactly-why)). No extra requests to your org; saved scans refresh their figures in the background on the next rescan.
+- **JLP theme.** A switch at the top right, beside About, turns on an optional retro console look, with charts to match. Your choice is remembered in this browser; the switch turns it back off. Emails are not affected.
 
 **1.0.0** (23 October 2026): scan and review any ArcGIS Online org you sign in to, and, once you turn sending on for yourself and send yourself a test, one friendly email per owner. One shared app for every organisation; nothing to register or install.
 

@@ -12,13 +12,13 @@ import '@esri/calcite-components/dist/components/calcite-tooltip';
 import './dc-sparkline';
 import type { Org, Row, Service } from '../../domain/types';
 import { itemUrl } from '../../domain/format';
-import { saySize } from './helpers';
+import { sayCredits, saySize } from './helpers';
 import { credit } from '../shared/text';
 import { PRIORITY_DOTS, PRIORITY_LABELS } from '../../domain/priority';
 
 /** Everything a row draws from its Row, as one string: a new Row object with the same sign draws the same (DC-100). */
 const signOf = (r: Row): string =>
-  [r.source.id, r.source.title, r.tidy ?? '', r.usedBy, r.sizeKnown, r.sizeMB, r.credits, r.priority, r.priorityReason, r.weekly?.join(','), r.views.map((v) => `${v.id}\u0001${v.title}`).join('\u0002')].join('\u0000');
+  [r.source.id, r.source.title, r.tidy ?? '', r.usedBy, r.sizeKnown, r.sizeMB, r.attachmentMB, r.credits, r.priority, r.priorityReason, r.weekly?.join(','), r.views.map((v) => `${v.id}\u0001${v.title}`).join('\u0002')].join('\u0000');
 
 /**
  * One source layer plus its hosted views (a "family"). Renders a single-item list so Calcite's list-item stays a
@@ -94,7 +94,7 @@ export class DcFamilyRow extends LitElement {
           ${this.showUsage ? html`<dc-sparkline .weekly=${r.weekly}></dc-sparkline>` : nothing}
           ${this.depsKnown && r.usedBy > 0 ? html`<calcite-chip class="c-risk" scale="s" appearance="solid" kind="neutral" icon="link" label="Tidy with care">Tidy with care</calcite-chip>` : nothing}
           <calcite-chip class="c-plain" scale="s" appearance="outline-fill" kind="neutral" data-size=${r.sizeKnown ? 'known' : 'unknown'} label=${saySize(r, this.stopped)}>${saySize(r, this.stopped)}</calcite-chip>
-          ${r.sizeKnown ? html`<calcite-chip class="c-reclaim" scale="s" appearance="outline-fill" kind="neutral" label="about ${credit(r.credits)} credits a month"><i class="sw reclaim"></i>≈ ${credit(r.credits)} credits a month</calcite-chip>` : nothing}
+          ${r.sizeKnown ? html`<calcite-chip class="c-reclaim" scale="s" appearance="outline-fill" kind="neutral" label=${sayCredits(r)} title=${sayCredits(r)}><i class="sw reclaim"></i>≈ ${credit(r.credits)} credits a month</calcite-chip>` : nothing}
           ${this.cue(r)}
         </div>
         </div>

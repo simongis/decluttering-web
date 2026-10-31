@@ -104,10 +104,10 @@ describe('partial scans (DC-053)', () => {
   });
 
   it('sizesToReuse: measured before and not modified since; unknown or changed ones are measured again', () => {
-    const svc = (id: string, sizeMB: number | null, modified: string) => ({ id, sizeMB, modified });
+    const svc = (id: string, sizeMB: number | null, modified: string) => ({ id, sizeMB, attachmentMB: 0, modified });
     const prev = { services: [svc('a', 5, iso(at(1))), svc('b', null, iso(at(1))), svc('c', 7, iso(at(1)))] } as unknown as Data;
     const cur = [svc('a', null, iso(at(1))), svc('b', null, iso(at(1))), svc('c', null, iso(at(2))), svc('d', null, iso(at(1)))];
-    expect([...sizesToReuse(cur, prev)]).toEqual([['a', 5]]);
+    expect([...sizesToReuse(cur, prev)]).toEqual([['a', { sizeMB: 5, attachmentMB: 0 }]]);
     expect(sizesToReuse(cur, undefined).size).toBe(0);
   });
 });

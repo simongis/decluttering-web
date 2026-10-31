@@ -1,0 +1,247 @@
+/*
+ * DC-135 (ADR 0014): the optional console look. An original retro control-panel style: black, a rounded
+ * elbow on the header, a segmented colour rule, pill buttons, warm accents and a condensed heading face (Antonio, OFL,
+ * loaded by src/ui/skin/skin.ts only when this is on). Every rule sits under html[data-skin="console"], so the standard
+ * look is untouched. skin.ts also switches Calcite to dark mode, so the dark tokens are the base and this file only
+ * overrides. Charts keep their light plate (--dc-plot-plate), as in dark mode.
+ *
+ * CONTRAST on #000 (WCAG 4.5:1 for text): text #f4ead8 17.0, muted #c9b9a3 10.6, amber #ffa133 10.4, peach #ffc58f
+ * 13.0, periwinkle #9ea7ff 8.6, lilac #c79bdb 8.3. Black text on amber 10.4. No motion.
+ *
+ * Specificity: calcite.css and tokens.css set their colours on .calcite-mode-dark (html and body both carry it), so
+ * these rules name both, at (0,1,1) and up.
+ */
+html[data-skin="console"],
+html[data-skin="console"] body {
+  --cx-amber: #ffa133;
+  --cx-peach: #ffc58f;
+  --cx-lilac: #c79bdb;
+  --cx-periwinkle: #9ea7ff;
+  --cx-rust: #e0745a;
+  --cx-black: #000;
+
+  /* The brand colours, remapped for black: blue text and marks go periwinkle, Midnight text goes peach. Midnight is a
+     background in one place (.pic-tip, below). */
+  --dc-boustead-blue: var(--cx-periwinkle);
+  --dc-midnight: var(--cx-peach);
+  --dc-brand-50: #1f1f2a;
+
+  --dc-font-display: "Antonio", "Arial Narrow", "Roboto Condensed", var(--dc-font-sans);
+  --dc-bg: var(--cx-black);
+  --dc-surface: #0b0b10;
+  --dc-surface-raised: #15151d;
+  --dc-text: #f4ead8;
+  --dc-text-muted: #c9b9a3;
+  --dc-border: #3a3346;
+  --dc-accent: var(--cx-amber);
+  --dc-accent-contrast: var(--cx-black);
+  --dc-heading: var(--cx-peach);
+  --dc-card-line: #3a3346;
+  --dc-page: var(--cx-black);
+  --dc-radius: 14px;
+  --dc-radius-s: 10px;
+  --dc-radius-m: 14px;
+  --dc-shadow-1: none;
+  --dc-shadow-2: 0 0 0 1px #3a3346;
+  --dc-shadow-header: none;
+  --dc-risk: var(--cx-amber); --dc-risk-tint: rgba(255, 161, 51, 0.16);
+  --dc-inactive: #f4ead8; --dc-inactive-line: var(--cx-lilac);
+  --dc-nudged: #e1d3bd; --dc-nudged-tint: #1f1f2a;
+
+  --calcite-color-brand: var(--cx-amber);
+  --calcite-color-brand-hover: var(--cx-peach);
+  --calcite-color-brand-press: #ffd9b3;
+  --calcite-color-brand-underline: rgba(255, 161, 51, 0.45);
+  --calcite-color-text-link: var(--cx-periwinkle);
+  --calcite-color-text-inverse: var(--cx-black);
+  --calcite-color-focus: var(--cx-periwinkle);
+  --calcite-color-background: var(--cx-black);
+  --calcite-color-foreground-1: #0b0b10;
+  --calcite-color-foreground-2: #15151d;
+  --calcite-color-foreground-3: #1f1f2a;
+  --calcite-color-text-1: #f4ead8;
+  --calcite-color-text-2: #e1d3bd;
+  --calcite-color-text-3: #c9b9a3;
+  --calcite-color-border-1: #3a3346;
+  --calcite-color-border-2: #4d455c;
+  --calcite-color-border-3: #7a6f8c;
+  --calcite-card-corner-radius: 14px;
+  --calcite-panel-corner-radius: 14px;
+  --calcite-popover-corner-radius: 14px;
+  --calcite-alert-corner-radius: 14px;
+  --calcite-dialog-corner-radius: 14px;
+}
+
+/* Pill buttons. */
+html[data-skin="console"] calcite-button { --calcite-button-corner-radius: 999px; }
+
+/* Headings: the condensed face, upper case, a little tracking. */
+html[data-skin="console"] :is(h1, h2, h3, .dc-logo .dc-name) { text-transform: uppercase; letter-spacing: 0.04em; }
+html[data-skin="console"] :is(h1, h2) { color: var(--dc-heading); }
+
+/* The header: a rounded elbow on the left and a segmented colour rule along the bottom. */
+html[data-skin="console"] calcite-shell > calcite-navigation[slot="header"] {
+  --calcite-navigation-background-color: transparent;
+  margin: 0.5rem 0.5rem 0;
+  border-block-start: 0;
+  border-inline-start: 3rem solid var(--cx-amber);
+  border-start-start-radius: 2rem;
+  padding-block-end: 8px;
+  background:
+    linear-gradient(90deg,
+      var(--cx-amber) 0 18%, transparent 18% 18.6%,
+      var(--cx-lilac) 18.6% 46%, transparent 46% 46.6%,
+      var(--cx-periwinkle) 46.6% 72%, transparent 72% 72.6%,
+      var(--cx-peach) 72.6% 94%, transparent 94% 94.6%,
+      var(--cx-rust) 94.6% 100%) left bottom / 100% 8px no-repeat,
+    var(--cx-black);
+}
+/* The body rail: a lilac bar down the left of the page, ending in a rounded foot. */
+html[data-skin="console"] calcite-shell > main {
+  border-inline-start: 0.75rem solid var(--cx-lilac);
+  border-end-start-radius: 1.25rem;
+  margin-block-start: 0.5rem;
+}
+@media (max-width: 600px) {
+  html[data-skin="console"] calcite-shell > calcite-navigation[slot="header"] { border-inline-start-width: 1.25rem; border-start-start-radius: 1rem; margin: 0.25rem 0.25rem 0; }
+  html[data-skin="console"] calcite-shell > main { border-inline-start-width: 0.4rem; }
+}
+
+/* White text on the brand fill would be 2:1 on amber: black instead. */
+html[data-skin="console"] :is(.pic-badge, .dc-step[aria-current="step"] .dc-step-dot) { color: var(--cx-black); }
+html[data-skin="console"] .pic-badge calcite-icon { --calcite-icon-color: var(--cx-black); }
+html[data-skin="console"] :is(.dc-user calcite-navigation-user, .dc-user-menu calcite-avatar) {
+  --calcite-avatar-background-color: var(--cx-lilac); --calcite-avatar-color: var(--cx-black); --calcite-navigation-user-avatar-color: var(--cx-black);
+}
+
+/* The look switch: an amber track with a black knob carrying the delta. */
+html[data-skin="console"] .dc-skin-track { background: var(--cx-amber); box-shadow: none; }
+html[data-skin="console"] .dc-skin-knob { background: var(--cx-black); color: var(--cx-amber); box-shadow: none; }
+
+/* Charts. The dot map draws itself as a star chart (src/ui/scan/chart-palette.ts) on a deep-space field, scan page and
+   Review alike; the Sankey's bars become pills in the console colours. */
+html[data-skin="console"],
+html[data-skin="console"] body {
+  --dc-plot-plate: #05060d;
+  --dc-stale-solid: var(--cx-rust);
+  --dc-risk-solid: var(--cx-amber);
+  --dc-dot-found: #4d455c;
+  --dc-sankey-rx: 999px;
+}
+html[data-skin="console"] .dm-stage canvas { background: var(--dc-plot-plate); box-shadow: inset 0 0 0 1px #2a2438; }
+
+/* Panels, the console way: no boxes. A section's title is a coloured bar with black text and a rounded left cap, and
+   its content sits straight on black. Colours vary by section, as on a real console. */
+html[data-skin="console"] main :is(calcite-panel, calcite-block, .summary, .chart-block, .unreach, .nudge, .owner, .since, .broken, .wait-card, .scan-progress, .panel-fold) {
+  border: 0; box-shadow: none; border-radius: 0; background: transparent;
+}
+html[data-skin="console"] main calcite-panel {
+  overflow: hidden; border-start-start-radius: 1.4rem;
+  --calcite-panel-background-color: transparent;
+  --calcite-panel-header-background-color: var(--cx-amber);
+  --calcite-panel-heading-text-color: var(--cx-black);
+  --calcite-panel-description-text-color: var(--cx-black);
+  --calcite-panel-icon-color: var(--cx-black);
+  --calcite-panel-header-action-text-color: var(--cx-black);
+  --calcite-panel-header-border-block-end: 0;
+}
+html[data-skin="console"] main calcite-block {
+  --cx-bar: var(--cx-lilac);
+  overflow: hidden; border-start-start-radius: 1.4rem;
+  --calcite-block-border-color: transparent;
+  --calcite-block-header-background-color: var(--cx-bar);
+  --calcite-block-header-background-color-hover: var(--cx-peach);
+  --calcite-block-header-background-color-press: var(--cx-peach);
+  --calcite-block-heading-text-color: var(--cx-black);
+  --calcite-block-heading-text-color-press: var(--cx-black);
+  --calcite-block-description-text-color: var(--cx-black);
+  --calcite-block-icon-color: var(--cx-black);
+  --calcite-block-icon-color-hover: var(--cx-black);
+}
+/* The caps: set at the same weight as the "no boxes" rule above, or its border-radius: 0 wins. */
+html[data-skin="console"] main :is(calcite-panel, calcite-block, .chart-block, .unreach, .nudge, .since, .broken) { border-start-start-radius: 1.4rem; }
+/* Calcite paints a block's header colour only when it folds; a fixed block (Credits you could save) gets the top rule
+   instead, with a peach heading, or black text would sit on black. */
+html[data-skin="console"] main calcite-block:not([collapsible]) {
+  border-block-start: 6px solid var(--cx-bar); border-start-start-radius: 0.9rem;
+  --calcite-block-header-background-color: transparent;
+  --calcite-block-heading-text-color: var(--cx-peach);
+  --calcite-block-description-text-color: var(--dc-text-muted);
+  --calcite-block-icon-color: var(--cx-peach);
+}
+/* Sub-sections inside a panel (Starting point, Adjust): peach headings on black, no bar of their own. */
+html[data-skin="console"] main :is(calcite-panel calcite-block, calcite-block calcite-block) {
+  border-start-start-radius: 0;
+  --calcite-block-header-background-color: transparent;
+  --calcite-block-header-background-color-hover: #1f1f2a;
+  --calcite-block-heading-text-color: var(--cx-peach);
+  --calcite-block-description-text-color: var(--dc-text-muted);
+  --calcite-block-icon-color: var(--cx-peach);
+  --calcite-block-icon-color-hover: var(--cx-peach);
+}
+html[data-skin="console"] main .chart-block { --cx-bar: var(--cx-periwinkle); }
+html[data-skin="console"] main :is(.nudge, [data-scan="credits"]) { --cx-bar: var(--cx-peach); }
+html[data-skin="console"] main .unreach { --cx-bar: var(--cx-rust); }
+html[data-skin="console"] main .broken { --cx-bar: var(--cx-amber); }
+/* Plain cards: a flat top rule with a rounded left end, nothing else. */
+html[data-skin="console"] main :is(.summary, .scan-progress, .wait-card, .panel-fold) { border-block-start: 6px solid var(--cx-amber); border-start-start-radius: 0.9rem; }
+/* Owners: each name sits on a coloured bar with a rounded left cap, alternating like a console's list. The chips on the
+   bar read black on a slightly deeper shade. */
+html[data-skin="console"] main .owner-list > .owner:nth-child(odd) { --cx-bar: var(--cx-periwinkle); --cx-bar-deep: #b9bfff; }
+html[data-skin="console"] main .owner-list > .owner:nth-child(even) { --cx-bar: var(--cx-lilac); --cx-bar-deep: #d6b5e4; }
+html[data-skin="console"] main .owner .owner-top {
+  background: var(--cx-bar, var(--cx-periwinkle)); border: 0; border-start-start-radius: 1.4rem; border-end-start-radius: 1.4rem;
+  --calcite-color-text-1: var(--cx-black); --calcite-color-text-2: var(--cx-black); --calcite-color-text-3: #1a1a1a;
+  --calcite-color-foreground-1: var(--cx-bar-deep, #b9bfff); --calcite-color-border-1: rgba(0, 0, 0, 0.55);
+  color: var(--cx-black);
+}
+html[data-skin="console"] main .owner .owner-id :is(strong, span) { color: var(--cx-black); }
+html[data-skin="console"] main .owner .owner-id strong { text-transform: uppercase; letter-spacing: 0.04em; }
+/* Readouts are numbers and labels: the round icon tiles go. */
+html[data-skin="console"] .fig .ic { display: none; }
+
+/* Review headline figures: Boustead Blue numbers fail on black, so warm ones (amber 10.4:1). */
+html[data-skin="console"] .fig b { color: var(--cx-amber); }
+html[data-skin="console"] .fig .ic { background: #1f1f2a; color: var(--cx-periwinkle); }
+html[data-skin="console"] .fig.f-cred .ic { background: transparent; color: var(--cx-peach); }
+html[data-skin="console"] .pic-tip { background: #1f1f2a; color: #f4ead8; }
+/* Plain links that take the browser's blue (2.2:1 on black) take periwinkle (8.6:1). */
+html[data-skin="console"] :is(dc-about, main) a:not([class*="calcite"]):not(.dc-step) { color: var(--cx-periwinkle); }
+/* The scan progress bar fills amber, like a console readout. */
+html[data-skin="console"] [data-scan="progress"] progress { accent-color: var(--cx-amber); }
+
+/* The steps (Scan, Review, Emails): three joined pill segments. Done steps periwinkle, the current one amber, steps not
+   yet open dim. */
+html[data-skin="console"] .dc-steps ol { gap: 4px; }
+html[data-skin="console"] .dc-steps li + li::before { display: none; }
+html[data-skin="console"] .dc-step { border-radius: 0; padding: 0.3rem 0.9rem; background: var(--cx-periwinkle); color: var(--cx-black); text-transform: uppercase; letter-spacing: 0.05em; font-family: var(--dc-font-display); font-weight: 600; }
+html[data-skin="console"] .dc-steps li:first-child .dc-step { border-start-start-radius: 999px; border-end-start-radius: 999px; padding-inline-start: 1.1rem; }
+html[data-skin="console"] .dc-steps li:last-child .dc-step { border-start-end-radius: 999px; border-end-end-radius: 999px; padding-inline-end: 1.1rem; }
+html[data-skin="console"] .dc-step[aria-current="step"] { background: var(--cx-amber); color: var(--cx-black); }
+html[data-skin="console"] .dc-step[aria-disabled="true"] { background: #2a2a38; color: #c9b9a3; opacity: 1; }
+html[data-skin="console"] a.dc-step:hover { background: var(--cx-peach); color: var(--cx-black); }
+html[data-skin="console"] .dc-step-dot { border: 0; background: transparent; width: auto; height: auto; color: inherit; font-size: 0.75rem; }
+html[data-skin="console"] .dc-step[aria-current="step"] .dc-step-dot { background: transparent; color: inherit; }
+
+/* What we're up to: each stage gets a status pill that lights amber as it finishes, one after another; the one in
+   progress glows lilac. The spinner and icons stay for screen readers, out of sight. */
+html[data-skin="console"] [data-scan="phases"] [slot="content-start"] {
+  position: relative; display: inline-block; inline-size: 2.4rem; block-size: 1rem; border-radius: 999px; background: #2a2a38;
+}
+html[data-skin="console"] [data-scan="phases"] [slot="content-start"] > * { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
+html[data-skin="console"] [data-scan="phases"] [data-state="done"] [slot="content-start"] { background: var(--cx-amber); }
+html[data-skin="console"] [data-scan="phases"] [data-state="working"] [slot="content-start"] { background: var(--cx-lilac); }
+html[data-skin="console"] [data-scan="phases"] [data-state="stopped"] [slot="content-start"] { background: var(--cx-rust); }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-skin="console"] [data-scan="phases"] [slot="content-start"] { transition: background-color 600ms ease; }
+  html[data-skin="console"] [data-scan="phases"] [data-state="working"] [slot="content-start"] { animation: cx-pulse 1.6s ease-in-out infinite; }
+  @keyframes cx-pulse { 50% { opacity: 0.45; } }
+}
+
+/* Emails: each column's bar its own colour; the template's placeholders as console pills. The preview stays white:
+   it shows the email as the owner will get it. */
+html[data-skin="console"] main calcite-panel.em-owners { --calcite-panel-header-background-color: var(--cx-lilac); }
+html[data-skin="console"] main calcite-panel.em-edit { --calcite-panel-header-background-color: var(--cx-periwinkle); }
+html[data-skin="console"] main calcite-panel.em-prev { --calcite-panel-header-background-color: var(--cx-peach); }
+html[data-skin="console"] .em-editor .ph { background: var(--cx-periwinkle); color: var(--cx-black); border-color: transparent; }
+html[data-skin="console"] .em-editor p:has(> .ph[data-ph="itemList"]:only-child) .ph { background: transparent; color: var(--cx-peach); border: 2px dashed var(--cx-lilac); border-radius: 999px; }

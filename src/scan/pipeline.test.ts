@@ -101,7 +101,7 @@ describe('scanOrg mapping', () => {
 
   it('keeps only the fields the domain needs on each service', async () => {
     const r = await scanOrg(fakeOrg().request, opts);
-    expect(Object.keys(find(r, ROADS)).sort()).toEqual(['access', 'created', 'dependencies', 'depsChecked', 'id','isView', 'lastViewed', 'modified', 'owner', 'sizeMB', 'sourceId', 'title', 'usage']);
+    expect(Object.keys(find(r, ROADS)).sort()).toEqual(['access', 'attachmentMB', 'created', 'dependencies', 'depsChecked', 'id','isView', 'lastViewed', 'modified', 'owner', 'sizeMB', 'sourceId', 'title', 'usage']);
   });
 
   it('DC-083: keeps lastViewed (ISO, or null when blank) and numViews from the search row', async () => {

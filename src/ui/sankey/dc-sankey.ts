@@ -53,6 +53,8 @@ export class DcSankey extends LitElement {
     text { font: 12px var(--dc-font-sans, system-ui, sans-serif); fill: var(--calcite-color-text-1, #151515); }
     .sub { fill: var(--calcite-color-text-3, #6a6a6a); }
     .link { fill: none; transition: stroke-opacity 0.15s; }
+    /* DC-135: the console look rounds the bars into pills. */
+    .bar { rx: var(--dc-sankey-rx, 2px); }
     .link.flow-clear { stroke: var(--_clear-flow); stroke-opacity: 0.55; }
     .link.flow-risk { stroke: var(--_risk); stroke-opacity: 0.4; }
     svg.hovering .link { stroke-opacity: 0.12; }
@@ -148,7 +150,7 @@ export class DcSankey extends LitElement {
       @focus=${() => { this.hovered = o.id; }} @blur=${() => { this.hovered = null; }}
       @click=${o.other ? nothing : () => this.select(o.id)}
       @keydown=${o.other ? nothing : (e: KeyboardEvent) => this.onKey(e, o.id)}>
-      <rect x=${d.x0} y=${d.y0} width=${d.x1 - d.x0} height=${Math.max(1, d.y1 - d.y0)} rx="2" style="fill:var(--_nudged)"></rect>
+      <rect class="bar" x=${d.x0} y=${d.y0} width=${d.x1 - d.x0} height=${Math.max(1, d.y1 - d.y0)} rx="2" style="fill:var(--_nudged)"></rect>
       <rect class="focus" x="4" y=${Math.min(d.y0, cy - 12) - 2} width=${d.x1 - 4} height=${Math.max(d.y1 - d.y0, 24) + 4} rx="4"></rect>
       <text x=${tx} y=${cy} dy="0.32em" text-anchor="end"><tspan class="nm">${o.label}</tspan><tspan class="sub"> · ${credit(o.credits)} credits</tspan></text>
       ${o.other ? nothing : svg`<polyline class="chev" points="${d.x0 - 14},${cy - 4} ${d.x0 - 9},${cy} ${d.x0 - 14},${cy + 4}"></polyline>`}
@@ -159,7 +161,7 @@ export class DcSankey extends LitElement {
     const clear = d.kind === 'clear';
     const cy = (d.y0 + d.y1) / 2;
     return svg`<g>
-      <rect x=${d.x0} y=${d.y0} width=${d.x1 - d.x0} height=${Math.max(1, d.y1 - d.y0)} rx="2" style="fill:${clear ? 'var(--_stale)' : 'var(--_risk)'}"></rect>
+      <rect class="bar" x=${d.x0} y=${d.y0} width=${d.x1 - d.x0} height=${Math.max(1, d.y1 - d.y0)} rx="2" style="fill:${clear ? 'var(--_stale)' : 'var(--_risk)'}"></rect>
       <text x=${d.x1 + 8} y=${cy} dy="-0.1em">${clear ? 'Stale, on their own' : 'Stale, but used by maps or apps'}</text>
       <text class="sub" x=${d.x1 + 8} y=${cy} dy="1.05em">${credit(t.credits)} credits · ${plural(t.services, 'service', 'services')}</text>
     </g>`;

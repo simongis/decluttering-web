@@ -83,7 +83,7 @@ const urlName = (u: string | undefined) => (u ? /\/services\/([^/]+)\//i.exec(u)
  * DC-071c: the services found so far, with the usage that has landed and the sizes read so far, as a provisional Data.
  * Unknown sizes are null (a small dot that grows later); views not linked yet stand alone (they merge when the core lands).
  */
-export function earlyData(found: readonly FoundItem[], sized: ReadonlyMap<string, number>, usage: EarlyUsage): Data {
+export function earlyData(found: readonly FoundItem[], sized: ReadonlyMap<string, number>, usage: EarlyUsage, attached?: ReadonlyMap<string, number>): Data {
   const owners = new Map<string, Owner>();
   const services: Service[] = found.map((f) => {
     if (!owners.has(f.owner)) owners.set(f.owner, { username: f.owner, fullName: '', disabled: false, thumbnail: null, lastNotified: null });
@@ -95,7 +95,7 @@ export function earlyData(found: readonly FoundItem[], sized: ReadonlyMap<string
     }
     const mb = sized.get(f.id);
     return {
-      id: f.id, title: f.title, owner: f.owner, created: isoOf(f.created), modified: isoOf(f.modified), sizeMB: mb ?? null,
+      id: f.id, title: f.title, owner: f.owner, created: isoOf(f.created), modified: isoOf(f.modified), sizeMB: mb ?? null, ...(mb !== undefined && attached?.has(f.id) ? { attachmentMB: attached.get(f.id) } : {}),
       access: '', isView: !!f.isView, sourceId: null, usage: [...byDay].sort((a, b) => a[0] - b[0]), dependencies: [],
       // DC-083: the tap passes lastViewed on; a search that did not carry the field leaves it absent (requests only).
       ...(f.lastViewed !== undefined ? { lastViewed: typeof f.lastViewed === 'number' && f.lastViewed > 0 ? isoOf(f.lastViewed) : null } : {}),
@@ -105,7 +105,7 @@ export function earlyData(found: readonly FoundItem[], sized: ReadonlyMap<string
 }
 
 export function buildDots(
-  input: { found: readonly FoundItem[]; sized: ReadonlyMap<string, number>; data: Data | null; depsKnown: boolean; usage?: EarlyUsage | null; now?: number; countSweeps?: boolean },
+  input: { found: readonly FoundItem[]; sized: ReadonlyMap<string, number>; /** DC-134: of those sizes, the attachments' MB. */ attached?: ReadonlyMap<string, number>; data: Data | null; depsKnown: boolean; usage?: EarlyUsage | null; now?: number; countSweeps?: boolean },
   t: Thresholds = SCAN_THRESHOLDS,
 ): DotModel {
   const { found, sized, depsKnown } = input;
@@ -113,7 +113,7 @@ export function buildDots(
   let { data } = input;
   // Usage and last-updated are all the "How stale" lens needs: place dots on it before the core is in.
   const early = !data && !!input.usage && found.length > 0 && found.every((f) => f.modified !== undefined);
-  if (early) data = earlyData(found, sized, input.usage as EarlyUsage);
+  if (early) data = earlyData(found, sized, input.usage as EarlyUsage, input.attached);
   let dots: Dot[];
   let stats: DotModel['stats'];
   let timed = false;
@@ -123,7 +123,7 @@ export function buildDots(
     dots = found.map((f) => {
       const mb = sized.get(f.id);
       return {
-        id: f.id, title: f.title, owner: f.owner, sizeMB: mb ?? 0, sized: mb !== undefined, credits: creditsPerMonth(mb ?? 0),
+        id: f.id, title: f.title, owner: f.owner, sizeMB: mb ?? 0, sized: mb !== undefined, credits: creditsPerMonth(mb ?? 0, input.attached?.get(f.id)),
         kind: mb !== undefined ? 'sized' : 'pending', candidate: false, staleness: 0.5,
         usedBy: 0, lastUsedDaysAgo: null, daysSinceUpdate: timed ? Math.max(0, Math.floor((now - (f.modified as number)) / DAY)) : 0,
         nSvc: 1, why: 'Still being read', view: f.isView || undefined,

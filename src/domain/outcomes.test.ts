@@ -35,6 +35,11 @@ describe('sinceNudges: one outcome per nudged item, first match wins (DC-096)', 
     const d = data([svc('a'), svc('v', { isView: true, sourceId: id('a'), modified: iso(5) })]);
     expect(outcomeOf(d, send())).toBe('updated');
   });
+  it('updated: a data edit after the send counts (DC-131), on the source or a view', () => {
+    expect(outcomeOf(data([svc('a', { dataEdited: iso(10) })]), send())).toBe('updated');
+    const d = data([svc('a'), svc('v', { isView: true, sourceId: id('a'), dataEdited: iso(5) })]);
+    expect(outcomeOf(d, send())).toBe('updated');
+  });
   it('used: last used (lastViewed or data requests) after the send', () => {
     expect(outcomeOf(data([svc('a', { lastViewed: iso(20) })]), send())).toBe('used');
     expect(outcomeOf(data([svc('a', { usage: [[30, 400]] })]), send())).toBe('used');

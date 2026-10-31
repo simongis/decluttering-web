@@ -46,8 +46,14 @@ export function matchPreset(t: Thresholds): Exclude<PresetName, 'suggested'> {
   return 'custom';
 }
 
-/** Credits per month for hosted feature layer storage. Hosted views have no storage of their own (size 0). */
-export const creditsPerMonth = (sizeMB: number): number => (sizeMB / 10) * 2.4;
+/**
+ * Credits per month for a hosted feature layer's storage. Hosted views have no storage of their own (size 0).
+ * DC-134: attachments (part of sizeMB) are file storage, 1.2 credits per GB; the rest is feature storage, 2.4 per 10 MB.
+ */
+export const creditsPerMonth = (sizeMB: number, attachmentMB = 0): number => {
+  const att = Math.min(Math.max(0, attachmentMB), sizeMB);
+  return ((sizeMB - att) / 10) * 2.4 + (att / 1024) * 1.2;
+};
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 /** 90 -> "3 months", 365 -> "a year", 730 -> "2 years", 45 -> "45 days". */
@@ -279,24 +285,31 @@ export function unusedFor(u: UseInfo, minDays: number, usageComplete: boolean): 
 type Base = Omit<Row, 'useKnown' | 'stale' | 'priority' | 'priorityReason' | 'why'>;
 
 /** The few numbers every verdict needs. Cheap: one pass over the family's members. */
-type Light = Pick<Row, 'lastModified' | 'daysSinceUpdate' | 'usedBy' | 'sizeMB' | 'credits' | 'sizeKnown'>;
+type Light = Pick<Row, 'lastModified' | 'daysSinceUpdate' | 'usedBy' | 'sizeMB' | 'attachmentMB' | 'credits' | 'sizeKnown'>;
 function lightOf(f: Family, ref: number): Light {
   const src = f.source, views = f.views;
   let deps: Set<string> | null = null;
   // The scan writes a missing `modified` as 1970-01-01 (pipeline.ts `iso`): that is no date, not a very old one.
   const dated = (t: number) => Number.isFinite(t) && t > 0;
   let lastModified = src.modified, lm = dated(Date.parse(lastModified)) ? Date.parse(lastModified) : NaN;
+  const newer = (iso: string | null | undefined) => {
+    if (!iso) return;
+    const t = Date.parse(iso);
+    if (dated(t) && !(lm >= t)) { lastModified = iso; lm = t; }
+  };
   // A family's storage is its source's; stray view sizes never count. Unknown sizes (null) count as 0 and mark the row.
-  let sizeKnown = true, sizeMB = 0;
+  let sizeKnown = true, sizeMB = 0, attachmentMB = 0;
   for (let k = -1; k < views.length; k++) {
     const m = k < 0 ? src : views[k] as Service;
     if (m.dependencies.length) { deps ??= new Set(); for (const d of m.dependencies) deps.add(d.id); }
-    if (k >= 0) { const t = Date.parse(m.modified); if (dated(t) && !(lm >= t)) { lastModified = m.modified; lm = t; } }
-    if (!m.isView) { if (m.sizeMB === null) sizeKnown = false; else sizeMB += m.sizeMB; }
+    // DC-131: last updated is the newest of the item dates and the data edit dates across the family.
+    if (k >= 0) newer(m.modified);
+    newer(m.dataEdited);
+    if (!m.isView) { if (m.sizeMB === null) sizeKnown = false; else { sizeMB += m.sizeMB; attachmentMB += m.attachmentMB ?? 0; } }
   }
   // No date at all: 0 days, so the "last updated" rule never flags it (errors lean towards not flagging).
   const daysSinceUpdate = Number.isFinite(lm) ? Math.floor((ref - lm) / DAY) : 0;
-  return { lastModified, daysSinceUpdate, usedBy: deps ? deps.size : 0, sizeMB, credits: creditsPerMonth(sizeMB), sizeKnown };
+  return { lastModified, daysSinceUpdate, usedBy: deps ? deps.size : 0, sizeMB, attachmentMB, credits: creditsPerMonth(sizeMB, attachmentMB), sizeKnown };
 }
 
 function scoreFamily(f: Family, use: UseInfo, owner: Owner, l: Light, usageComplete: boolean): Base {
@@ -317,7 +330,7 @@ function scoreFamily(f: Family, use: UseInfo, owner: Owner, l: Light, usageCompl
     lastUsedDaysAgo: use.last, noUseRecorded: use.none && usageComplete, requestsOnly: !use.hasViewed,
     numViews: viewCounts.length ? viewCounts.reduce((a, b) => a + b, 0) : null,
     daysSinceUpdate: l.daysSinceUpdate, lastModified: l.lastModified,
-    usedBy: l.usedBy, sizeMB: l.sizeMB, credits: l.credits, sizeKnown: l.sizeKnown,
+    usedBy: l.usedBy, sizeMB: l.sizeMB, attachmentMB: l.attachmentMB, credits: l.credits, sizeKnown: l.sizeKnown,
     tidyHints, tidy: tidyTip(tidyHints), weekly,
     staleness: (clamp01(use.last === null ? 1 : use.last / 365) + clamp01(l.daysSinceUpdate / 730)) / 2,
   };

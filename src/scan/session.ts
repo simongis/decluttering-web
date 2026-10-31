@@ -61,7 +61,7 @@ export async function scanSession(request: RequestFn, o: SessionOptions): Promis
   if (core.sizesPending) {
     // Measure only what the cache doesn't already know.
     const reuse = sizesToReuse(core.data.services, prev?.data);
-    if (reuse.size) core.data = withSizes(core.data, new Map([...reuse].map(([id, sizeMB]): [string, SizeInfo] => [id, { sizeMB }])));
+    if (reuse.size) core.data = withSizes(core.data, reuse);
   }
   const coreMs = Math.round(clock() - t0);
 

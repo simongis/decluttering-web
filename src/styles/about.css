@@ -60,3 +60,4 @@ dc-about .about-gh { flex: none; }
 dc-about .about-contact { display: inline-block; }
 dc-about .about-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 dc-about .about-disclaimer { margin: 0.75rem 0 0; font-size: 0.85rem; color: var(--calcite-color-text-3); }
+

@@ -83,7 +83,8 @@ export function sinceNudges(data: Data, sends: readonly LoggedSend[] | null | un
       if (service.owner !== s.owner) return { id: i, outcome: 'handedOver', service };
       const f = fam.get(i);
       const members = f ? [f.source, ...f.views] : [service];
-      if (members.some((m) => Date.parse(m.modified) > sent)) return { id: i, outcome: 'updated', service };
+      // DC-131: the item or its data, whichever changed.
+      if (members.some((m) => Date.parse(m.modified) > sent || Date.parse(m.dataEdited ?? '') > sent)) return { id: i, outcome: 'updated', service };
       const last = familyUse(data, members, opts.countSweeps).last;
       // `last` is whole days before the scan, so the use was certainly after the send only a full day later.
       if (last !== null && last + 1 <= sentAgo) return { id: i, outcome: 'used', service };

@@ -11,6 +11,8 @@ export interface SettingsShape {
   templateEdits: Record<string, string>;
   /** DC-086: per org id, "Count days when everything was touched at once" (absent: off). */
   countSweeps: Record<string, boolean>;
+  /** DC-135 (ADR 0014): the optional console look; absent means the standard look. */
+  skin: 'console';
 }
 
 export class Settings {

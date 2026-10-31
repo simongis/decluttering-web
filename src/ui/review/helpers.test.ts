@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnerGroup, Row } from '../../domain/types';
 import { PRESETS } from '../../domain/stale';
-import { itemOn, sayRule, saySize, sayWhy, selectionOf, sparkGeometry } from './helpers';
+import { itemOn, sayCredits, sayRule, saySize, sayWhy, selectionOf, sparkGeometry } from './helpers';
 
 const row = (id: string, views = 0): Row => ({
   source: { id }, views: new Array(views).fill({}), credits: 2, sizeMB: 10,
@@ -61,5 +61,13 @@ describe('after a scan stopped early (DC-053)', () => {
     expect(saySize({ sizeMB: 0, sizeKnown: false })).toBe('Size not measured yet');
     expect(saySize({ sizeMB: 0, sizeKnown: false }, true)).toBe('Size not measured');
     expect(saySize({ sizeMB: 2, sizeKnown: true }, true)).toBe('2 MB');
+  });
+});
+
+describe('sayCredits (DC-134)', () => {
+  it('names attachments only when there are some', () => {
+    expect(sayCredits({ credits: 24, attachmentMB: 0 })).toBe('About 24 credits a month');
+    expect(sayCredits({ credits: 0.31, attachmentMB: 227 })).toBe('About 0.3 credits a month. Includes 227 MB of attachments, billed as file storage at a much lower rate.');
+    expect(sayCredits({ credits: 0.1, attachmentMB: 0.01 })).toBe('About 0.1 credits a month');
   });
 });

@@ -24,6 +24,8 @@ import { CLIENT_ID } from './auth/config';
 import type { RequestFn } from './scan/types';
 import { mergeUsageWindow } from './scan/pipeline';
 import { countSweeps, onCountSweepsChange, setCountSweeps } from './cache/settings';
+import { currentSkin, onSkinChange, setSkin, SKIN_COPY } from './ui/skin/skin';
+import { DELTA_ICON, SUN_ICON } from './ui/skin/icons';
 import '@esri/calcite-components/dist/components/calcite-navigation-user';
 import '@esri/calcite-components/dist/components/calcite-avatar';
 import '@esri/calcite-components/dist/components/calcite-popover';
@@ -59,6 +61,9 @@ function demoFast(): boolean {
 @customElement('app-root')
 export class AppRoot extends LitElement {
   @state() private route: Route = parseRoute(window.location.hash);
+  /** DC-135: the console look is on (the header then offers the way back). */
+  @state() private consoleSkin = currentSkin() === 'console';
+  private offSkin: (() => void) | null = null;
   /** DC-110 (FB-70): the route we came from when About opened, so About can offer a Back link. */
   private beforeAbout: Route | null = null;
   @state() private demoData: Data | null = null;
@@ -129,6 +134,7 @@ export class AppRoot extends LitElement {
   private demoSkipping = false;
   private found: FoundItem[] = [];
   private sized = new Map<string, number>();
+  private attached = new Map<string, number>();
   /** DC-071c: usage as its windows land (service name to day to count), and the latest window's end; the map uses it once every window is in. */
   private usageByName = new Map<string, Map<number, number>>();
   private usageEnd = 0;
@@ -181,7 +187,7 @@ export class AppRoot extends LitElement {
   private refreshDots(): void {
     if (!this.scanShown) { this.dotsBehind = true; return; }
     this.dotsBehind = false;
-    this.dots = buildDots({ found: this.found, sized: this.sized, data: this.data, depsKnown: this.depsKnown, usage: this.earlyUsage(), countSweeps: this.countingSweeps });
+    this.dots = buildDots({ found: this.found, sized: this.sized, attached: this.attached, data: this.data, depsKnown: this.depsKnown, usage: this.earlyUsage(), countSweeps: this.countingSweeps });
   }
 
   private scheduleDots(): void {
@@ -219,6 +225,7 @@ export class AppRoot extends LitElement {
     this.narrowQuery.addEventListener('change', this.onNarrow);
     this.offSweeps = onCountSweepsChange(this.onSweepsSetting);
     this.offSolo = onSoloChange(() => this.requestUpdate());
+    this.offSkin = onSkinChange(() => { this.consoleSkin = currentSkin() === 'console'; });
     void this.ensureDemo();
     if (import.meta.env.DEV && await this.maybeSimulate()) { this.signingIn = false; return; }
     if (import.meta.env.DEV && /^#\/probe-usage\/?$/.test(window.location.hash)) { await (await import('./dev/usage-probe')).defineUsageProbe(); this.probe = true; this.signingIn = false; return; }
@@ -280,6 +287,7 @@ export class AppRoot extends LitElement {
     clearTimeout(this.dotsTimer);
     this.offSweeps?.(); this.offSweeps = null;
     this.offSolo?.(); this.offSolo = null;
+    this.offSkin?.(); this.offSkin = null;
     super.disconnectedCallback();
   }
 
@@ -407,7 +415,7 @@ export class AppRoot extends LitElement {
     this.refreshFailed = false;
     // A rescan keeps the last result's full-scan time (for the estimate) until its own scan replaces it.
     if (!resume && !rescan) this.lastEntry = null;
-    this.found = []; this.sized = new Map(); this.dotsAt = 0;
+    this.found = []; this.sized = new Map(); this.attached = new Map(); this.dotsAt = 0;
     this.usageByName = new Map(); this.usageEnd = 0; this.usageComplete = false;
     this.eta = null;
     this.notify = 'off';
@@ -451,7 +459,7 @@ export class AppRoot extends LitElement {
         },
         onTap: (e: ScanTap) => {
           if (e.kind === 'found') { this.found = [...this.found, ...e.items]; this.scheduleDots(); }
-          else if (e.kind === 'sized') { this.sized.set(e.id, e.sizeMB); this.scheduleDots(); }
+          else if (e.kind === 'sized') { this.sized.set(e.id, e.sizeMB); if (e.attachmentMB) this.attached.set(e.id, e.attachmentMB); this.scheduleDots(); }
           else if (e.kind === 'usage') {
             this.usageEnd = Math.max(this.usageEnd, e.endTime);
             mergeUsageWindow(this.usageByName, e.rows); // FB-29: same-name rows add up, never overwrite
@@ -861,9 +869,12 @@ export class AppRoot extends LitElement {
     return html`
       <calcite-shell @dc-selection-change=${(e: CustomEvent<{ owners: string[] }>) => { this.ticked = e.detail.owners.length; }}>
         <calcite-navigation slot="header" label="Decluttering">
-          <div slot="logo" class="dc-logo"><a class="dc-home" data-action="home" href=${hrefOf(homeRoute(this.route, this.signedIn))} aria-label="Decluttering, home" @click=${this.goHome}><img src="${import.meta.env.BASE_URL}brand-mark.svg" alt=""><span class="dc-name">Decluttering</span></a>${this.orgName ? html`<span class="dc-org">${this.orgName}</span>` : nothing}</div>
+          <div slot="logo" class="dc-logo"><a class="dc-home" data-action="home" href=${hrefOf(homeRoute(this.route, this.signedIn))} aria-label="Decluttering, home" @click=${this.goHome}><img src="${import.meta.env.BASE_URL}${this.consoleSkin ? 'brand-mark-console.svg' : 'brand-mark.svg'}" alt=""><span class="dc-name">Decluttering</span></a>${this.orgName ? html`<span class="dc-org">${this.orgName}</span>` : nothing}</div>
           <calcite-button slot="content-end" class="dc-about-link" data-action="about" appearance="transparent" kind="neutral" icon-start="information"
             href=${hrefOf('about')} label="About Decluttering" ?active=${this.route === 'about'}>${this.narrow ? nothing : 'About'}</calcite-button>
+          <button type="button" role="switch" slot="content-end" class="dc-skin-toggle" data-action="skin-toggle" aria-checked=${this.consoleSkin ? 'true' : 'false'}
+            aria-label=${SKIN_COPY.name} title=${this.consoleSkin ? SKIN_COPY.backLabel : SKIN_COPY.badge}
+            @click=${() => setSkin(this.consoleSkin ? 'standard' : 'console')}><span class="dc-skin-track" aria-hidden="true"><span class="dc-skin-knob"><svg viewBox="0 0 24 24" width="14" height="14" focusable="false">${this.consoleSkin ? DELTA_ICON : SUN_ICON}</svg></span></span></button>
           ${this.renderUser()}
         </calcite-navigation>
         ${this.access && !this.inDemo ? html`<dc-access-dialog ?open=${this.accessOpen} .mode=${this.access.mode} .usageReadable=${this.access.usageReadable} .mayOptIn=${this.access.writable} .optedIn=${this.sendingOn} .email=${this.access.email} @dc-turn-on-sending=${this.askTurnOn} @dc-turn-off-sending=${this.askTurnOff} @dc-access-close=${() => { this.accessOpen = false; }}></dc-access-dialog>

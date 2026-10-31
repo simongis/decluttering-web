@@ -9,11 +9,13 @@ import { PRESET_NAMES } from '../../domain/stale';
 import type { Org, Thresholds } from '../../domain/types';
 import { NO_STORAGE_MB, SCAN_THRESHOLDS, SHOW_ALL_BELOW, dotWhy, SMALL_LAYER_MB, rampK, ringed, withSmallFloor, type Dot, type DotModel, type HiddenSmall } from './dots';
 import {
-  DENSITY_ABOVE, ENTER_MS, FADE_MS, HEIGHT_MS, LENSES, LENS_MS, LENS_STAGGER_MS, RAMP, STAGGER_MAX_MS, TRAVEL_MS, Y_BAND,
+  DENSITY_ABOVE, ENTER_MS, FADE_MS, HEIGHT_MS, LENSES, LENS_MS, LENS_STAGGER_MS, STAGGER_MAX_MS, TRAVEL_MS, Y_BAND,
   clamp, densityAlpha, densityBins, entryLook, hash, heightTween, lensPoint, mapHeight, motionAt, pendingRadius, prePoint,
   rampColour, retarget, seedOf, sizeBand, sizeRadius, staggerDelay, staleZone, zoneBox, tweenAt, tweenDone, xSize, xUpdate, yLastUsed,
   type LensId, type Motion, type Place, type Tween,
 } from './dot-layout';
+import { chartPalette, type ChartPalette } from './chart-palette';
+import { onSkinChange } from '../skin/skin';
 
 /*
  * DC-064: the scan screen's dot map, ported from prototypes/d-converged/scan.js (canvas, lenses, stale zone, tooltip,
@@ -32,7 +34,6 @@ import {
  */
 
 const TIP_DELAY = 400, FADE_HALF = 120, REVEAL_MS = 900;
-const GREY_DEEP = '#9fb2c0', PENDING = '#dfe6ec', RING = '#1b3a57';
 const SHOW_SMALL_KEY = 'decluttering:dotmap.showSmall';
 const readShowSmall = (): boolean => { try { return localStorage.getItem(SHOW_SMALL_KEY) === '1'; } catch { return false; } };
 const writeShowSmall = (v: boolean): void => { try { localStorage.setItem(SHOW_SMALL_KEY, v ? '1' : '0'); } catch { /* private window or blocked storage: the choice just is not remembered */ } };
@@ -136,7 +137,11 @@ export class DcDotMap extends LitElement {
   private readonly rmq = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
   private reduce = this.rmq?.matches ?? false;
   private onReduceChange = (e: MediaQueryListEvent): void => { this.reduce = e.matches; this.kick(); };
-  override connectedCallback(): void { super.connectedCallback(); this.reduce = this.rmq?.matches ?? false; this.rmq?.addEventListener?.('change', this.onReduceChange); }
+  /** DC-135: the look in force; a change recolours every dot and repaints. */
+  private pal: ChartPalette = chartPalette();
+  private offSkin: (() => void) | null = null;
+  private onSkin = (): void => { this.pal = chartPalette(); for (const d of this.sprites) d.colour = this.colourOf(d); this.kick(); this.requestUpdate(); };
+  override connectedCallback(): void { super.connectedCallback(); this.reduce = this.rmq?.matches ?? false; this.rmq?.addEventListener?.('change', this.onReduceChange); this.pal = chartPalette(); this.offSkin = onSkinChange(this.onSkin); }
   private readonly pad = { l: 70, r: 14, t: 12, b: 40 }; // DC-083: room for "6 months" on the last-used axis
 
   protected override createRenderRoot(): HTMLElement { return this; }
@@ -146,6 +151,7 @@ export class DcDotMap extends LitElement {
     clearTimeout(this.tipTimer); clearTimeout(this.hideTimer);
     this.ro?.disconnect(); this.ro = null;
     this.rmq?.removeEventListener?.('change', this.onReduceChange);
+    this.offSkin?.(); this.offSkin = null;
     super.disconnectedCallback();
   }
 
@@ -187,8 +193,9 @@ export class DcDotMap extends LitElement {
   }
 
   private colourOf(d: Dot): string {
-    if (!this.shown.revealed) return d.sized ? GREY_DEEP : PENDING;
-    return d.kind === 'stale' ? rampColour(rampK(d, this.shown.staleMin)) : GREY_DEEP;
+    const P = this.pal;
+    if (!this.shown.revealed) return d.sized ? P.grey : P.pending;
+    return d.kind === 'stale' ? rampColour(rampK(d, this.shown.staleMin), P.ramp) : P.grey;
   }
 
   private setCanvasHeight(h: number): void {
@@ -304,7 +311,7 @@ export class DcDotMap extends LitElement {
   private halo(text: string, x: number, y: number, align: CanvasTextAlign, colour: string, font: string): void {
     const ctx = this.ctx as CanvasRenderingContext2D;
     ctx.save(); ctx.font = font; ctx.textAlign = align; ctx.lineJoin = 'round';
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 3.5; ctx.strokeText(text, x, y);
+    ctx.strokeStyle = this.pal.halo; ctx.lineWidth = 3.5; ctx.strokeText(text, x, y);
     ctx.fillStyle = colour; ctx.fillText(text, x, y); ctx.restore();
   }
 
@@ -313,23 +320,42 @@ export class DcDotMap extends LitElement {
     const k = this.reveal();
     const early = !this.shown.revealed && !!this.shown.timed;
     if (k < 0.02 && !early) return;
+    const P = this.pal, cap = (s: string) => (P.starChart ? s.toUpperCase() : s);
     ctx.save();
-    ctx.font = '11px system-ui, sans-serif'; ctx.lineWidth = 1; ctx.globalAlpha = k;
+    ctx.font = P.starChart ? `12px ${P.font}` : `11px ${P.font}`; ctx.lineWidth = 1; ctx.globalAlpha = k;
     const bottom = p.y0 + p.h, right = p.x0 + p.w;
-    const xt = (n: number, label: string) => { ctx.fillStyle = '#5b6b78'; ctx.textAlign = 'center'; ctx.fillText(label, this.plotX(n), bottom + 16); };
-    const yt = (n: number, label: string, grid = true) => {
-      const y = this.plotY(n); ctx.fillStyle = '#5b6b78'; ctx.textAlign = 'right'; ctx.fillText(label, p.x0 - 6, y + 4);
-      if (grid) { ctx.beginPath(); ctx.moveTo(p.x0, Math.round(y) + 0.5); ctx.lineTo(right, Math.round(y) + 0.5); ctx.strokeStyle = '#eef2f5'; ctx.stroke(); }
+    // DC-135: the star chart's graticule is dotted; the standard grid is solid.
+    const gridLine = (x0: number, y0: number, x1: number, y1: number) => {
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.strokeStyle = P.grid;
+      if (P.starChart) ctx.setLineDash([1, 4]);
+      ctx.stroke(); ctx.setLineDash([]);
     };
-    const vline = (n: number) => { const x = Math.round(this.plotX(n)) + 0.5; ctx.beginPath(); ctx.moveTo(x, p.y0); ctx.lineTo(x, bottom); ctx.strokeStyle = '#eef2f5'; ctx.stroke(); };
+    const xt = (n: number, label: string) => { ctx.fillStyle = P.text; ctx.textAlign = 'center'; ctx.fillText(cap(label), this.plotX(n), bottom + 16); };
+    const yt = (n: number, label: string, grid = true) => {
+      const y = this.plotY(n); ctx.fillStyle = P.text; ctx.textAlign = 'right'; ctx.fillText(cap(label), p.x0 - 6, y + 4);
+      if (grid) gridLine(p.x0, Math.round(y) + 0.5, right, Math.round(y) + 0.5);
+    };
+    const vline = (n: number) => { const x = Math.round(this.plotX(n)) + 0.5; gridLine(x, p.y0, x, bottom); };
     const timeAxis = () => {
       for (const [d, l] of [[90, '3 months'], [180, '6 months'], [365, '1 year'], [730, '2 years']] as const) { vline(xUpdate(d, 0)); xt(xUpdate(d, 0), l); }
       vline(0.89); xt(0.95, '3 years +');
     };
     const frame = (xTitle: string, yTitle: string) => {
-      ctx.beginPath(); ctx.moveTo(p.x0 + 0.5, p.y0); ctx.lineTo(p.x0 + 0.5, bottom + 0.5); ctx.lineTo(right, bottom + 0.5); ctx.strokeStyle = '#e3e9ee'; ctx.stroke();
-      ctx.fillStyle = '#5b6b78'; ctx.textAlign = 'center'; ctx.fillText(xTitle, p.x0 + p.w / 2, bottom + 33);
-      ctx.save(); ctx.translate(11, p.y0 + p.h / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText(yTitle, 0, 0); ctx.restore();
+      if (P.starChart) {
+        // Lilac corner brackets instead of a full frame, like a navigation display.
+        const L = 14, x1 = p.x0 + 0.5, y1 = p.y0 + 0.5, x2 = right - 0.5, y2 = bottom + 0.5;
+        ctx.save(); ctx.strokeStyle = P.frame; ctx.lineWidth = 2; ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(x1, y1 + L); ctx.lineTo(x1, y1); ctx.lineTo(x1 + L, y1);
+        ctx.moveTo(x2 - L, y1); ctx.lineTo(x2, y1); ctx.lineTo(x2, y1 + L);
+        ctx.moveTo(x1, y2 - L); ctx.lineTo(x1, y2); ctx.lineTo(x1 + L, y2);
+        ctx.moveTo(x2 - L, y2); ctx.lineTo(x2, y2); ctx.lineTo(x2, y2 - L);
+        ctx.stroke(); ctx.restore();
+      } else {
+        ctx.beginPath(); ctx.moveTo(p.x0 + 0.5, p.y0); ctx.lineTo(p.x0 + 0.5, bottom + 0.5); ctx.lineTo(right, bottom + 0.5); ctx.strokeStyle = P.frame; ctx.stroke();
+      }
+      ctx.fillStyle = P.text; ctx.textAlign = 'center'; ctx.fillText(cap(xTitle), p.x0 + p.w / 2, bottom + 33);
+      ctx.save(); ctx.translate(11, p.y0 + p.h / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText(cap(yTitle), 0, 0); ctx.restore();
     };
     if (early) {
       // DC-082: before usage, the time axis is already true; up waits for usage.
@@ -341,9 +367,9 @@ export class DcDotMap extends LitElement {
     if (this.lens === 'stale') {
       const z = staleZone(t);
       const zx = this.plotX(z.x) - 0.5, zy = this.plotY(z.y), zyTop = p.y0 + 2, zr = right - 2;
-      ctx.fillStyle = 'rgba(9,35,64,0.04)'; ctx.fillRect(zx, zyTop, zr - zx, zy - zyTop);
+      ctx.fillStyle = P.zoneFill; ctx.fillRect(zx, zyTop, zr - zx, zy - zyTop);
       const sy = Math.round(this.plotY(0.893)) + 0.5; // separator under the "No use" band (no use recorded)
-      ctx.beginPath(); ctx.moveTo(p.x0, sy); ctx.lineTo(right, sy); ctx.strokeStyle = '#dbe3e9'; ctx.setLineDash([2, 3]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(p.x0, sy); ctx.lineTo(right, sy); ctx.strokeStyle = P.sep; ctx.setLineDash([2, 3]); ctx.stroke(); ctx.setLineDash([]);
       ctx.globalAlpha = this.preTimed ? 1 : k; timeAxis(); ctx.globalAlpha = k; // the time axis was already there
       yt((Y_BAND[0] + Y_BAND[1]) / 2, 'No use', false);
       for (const [d, l] of [[0, 'today'], [90, '3 months'], [180, '6 months'], [365, '1 year'], [730, '2 years']] as const) yt(yLastUsed(d), l);
@@ -351,17 +377,17 @@ export class DcDotMap extends LitElement {
       // FB-63: the border goes on after the grid lines. A grid line (1 year, 6 months...) can sit on the zone's edge, and painted first
       // the border was wiped out by it (Gentle and Suggested put the left edge exactly on "1 year").
       const zb = zoneBox(p, INSET, t);
-      ctx.save(); ctx.strokeStyle = '#b01f59'; ctx.setLineDash([4, 3]); ctx.strokeRect(zb.left, zb.top, zb.right - zb.left, zb.bottom - zb.top); ctx.restore();
+      ctx.save(); ctx.strokeStyle = P.zoneLine; ctx.setLineDash(P.starChart ? [6, 3] : [4, 3]); ctx.strokeRect(zb.left, zb.top, zb.right - zb.left, zb.bottom - zb.top); ctx.restore();
       ctx.globalAlpha = k * 0.95;
       // FB-41: no corner labels; the axis titles and the stale zone say it.
-      this.halo(`Stale zone (${this.zoneLabel})`, zx + 8, zyTop + 14, 'left', '#b01f59', '600 11.5px system-ui, sans-serif');
+      this.halo(cap(`Stale zone (${this.zoneLabel})`), zx + 8, zyTop + 14, 'left', P.zoneLine, P.starChart ? `600 12.5px ${P.font}` : `600 11.5px ${P.font}`);
       ctx.globalAlpha = k;
     } else if (this.lens === 'big') {
       const max = this.shown.maxSizeMB;
       // FB-30: the left column says what is in it (views and empty layers have no storage; some are not measured yet).
       const band = sizeBand(this.sprites);
-      ctx.fillStyle = '#5b6b78'; ctx.textAlign = 'left'; ctx.fillText(band.label, p.x0 + 4, bottom + 16);
-      if (band.note) this.halo(band.note, p.x0 + 6, p.y0 + 12, 'left', '#5b6b78', 'italic 11px system-ui, sans-serif');
+      ctx.fillStyle = P.text; ctx.textAlign = 'left'; ctx.fillText(cap(band.label), p.x0 + 4, bottom + 16);
+      if (band.note) this.halo(cap(band.note), p.x0 + 6, p.y0 + 12, 'left', P.text, P.starChart ? `12px ${P.font}` : `italic 11px ${P.font}`);
       for (const [mb, l] of [[1, '1 MB'], [10, '10 MB'], [100, '100 MB'], [1024, '1 GB']] as const) if (mb < max * 1.2) { vline(xSize(mb, 0, max)); xt(xSize(mb, 0, max), l); }
       yt(0, 'barely'); yt(0.5, 'fairly'); yt(1, 'very');
       xTitle = 'Storage'; yTitle = 'How stale';
@@ -380,7 +406,7 @@ export class DcDotMap extends LitElement {
     const ctx = this.ctx as CanvasRenderingContext2D, CELL = 6;
     const bins = densityBins(pts, CELL);
     let max = 1; for (const n of bins.values()) if (n > max) max = n;
-    ctx.save(); ctx.fillStyle = GREY_DEEP;
+    ctx.save(); ctx.fillStyle = this.pal.grey;
     for (const [k, n] of bins) {
       const [c, r] = k.split(',').map(Number) as [number, number];
       ctx.globalAlpha = densityAlpha(n, max) * strength;
@@ -414,9 +440,13 @@ export class DcDotMap extends LitElement {
       if (this.lens === 'used' && revealed && d.usedBy === 0) alpha *= 0.7;
       if (r < 0.2 || alpha < 0.01) continue;
       ctx.globalAlpha = alpha; ctx.fillStyle = d.colour;
+      // DC-135: in the star chart, stale dots glow like stars (only those: a glow on thousands of dots costs frames).
+      const glow = this.pal.starChart && revealed && d.kind === 'stale';
+      if (glow) { ctx.shadowColor = d.colour; ctx.shadowBlur = 8; }
       ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+      if (glow) ctx.shadowBlur = 0;
       if (revealed && !d.shade && ringed(d, this.lens)) {
-        ctx.globalAlpha = (this.lens === 'used' ? 1 : 0.9) * Math.min(1, alpha / 0.7); ctx.strokeStyle = RING; ctx.lineWidth = this.lens === 'used' ? 1.6 : 1.1;
+        ctx.globalAlpha = (this.lens === 'used' ? 1 : 0.9) * Math.min(1, alpha / 0.7); ctx.strokeStyle = this.pal.ring; ctx.lineWidth = this.lens === 'used' ? 1.6 : 1.1;
         ctx.beginPath(); ctx.arc(x, y, r + 1.6, 0, 7); ctx.stroke();
       }
     }
@@ -433,7 +463,7 @@ export class DcDotMap extends LitElement {
     ctx.globalAlpha = 1;
     const act = this.hover ?? (this.focusIdx >= 0 ? this.focusIdx : null);
     const a = act != null ? this.sprites[act] : undefined;
-    if (a && a.rad) { ctx.strokeStyle = '#0a2540'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(a.x, a.y, a.rad + 3.5, 0, 7); ctx.stroke(); }
+    if (a && a.rad) { ctx.strokeStyle = this.pal.focus; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(a.x, a.y, a.rad + 3.5, 0, 7); ctx.stroke(); }
   }
 
   private kick(): void { if (!this.raf && this.isConnected) this.raf = requestAnimationFrame(this.frame); }
@@ -577,7 +607,7 @@ export class DcDotMap extends LitElement {
           <p class="dm-sr" id="dc-dm-help" data-scan="dots-help">${ready ? `${fmtInt(m.dots.length)} ${m.dots.length === 1 ? 'dot' : 'dots'} shown, ${fmtInt(m.dots.filter((d) => d.kind === 'stale').length)} in the stale zone. ` : 'Still reading your layers. '}Arrow keys move between dots from the stalest. Home and End jump to the first and last. Enter opens the layer in ArcGIS Online. Escape clears the selection.</p>
         </div>
         <div class="dm-legend">
-          <span class="dm-lg"><span class="dm-ramp" style="background: linear-gradient(90deg, ${RAMP.from}, ${RAMP.mid}, ${RAMP.to})"></span><span class="dm-ramp-labels"><span>Barely stale</span><span>Very stale</span></span></span>
+          <span class="dm-lg"><span class="dm-ramp" style="background: linear-gradient(90deg, ${this.pal.ramp.from}, ${this.pal.ramp.mid}, ${this.pal.ramp.to})"></span><span class="dm-ramp-labels"><span>Barely stale</span><span>Very stale</span></span></span>
           ${dense
             ? html`<span class="dm-lg" data-scan="density"><i class="dm-shade"></i>${fmtInt(asDots)} likely stale as dots; ${fmtInt(m.dots.length - asDots)} others as shading</span>`
             : html`<span class="dm-lg"><i class="dm-grey"></i>Not stale</span>`}

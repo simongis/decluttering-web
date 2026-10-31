@@ -410,6 +410,7 @@ export function withSizes(data: Data, sizes: ReadonlyMap<string, SizeInfo>): Dat
       const z = sizes.get(s.id);
       if (!z) return s;
       const out: Service = { ...s, sizeMB: z.sizeMB };
+      if (z.attachmentMB !== undefined) out.attachmentMB = z.attachmentMB;
       if (z.description !== undefined) out.description = z.description;
       if (z.snippet !== undefined) out.snippet = z.snippet;
       if (z.tags !== undefined) out.tags = z.tags;
@@ -424,12 +425,14 @@ const LIKELY_STALE = { ...PRESETS.balanced, maxUsedBy: Number.MAX_SAFE_INTEGER, 
 /**
  * Which services still need a size, in the order to measure them (DC-053): sources of families that look stale on usage
  * and age alone first, then the other sources, then views last (a view's storage is its source's, so its own size never
- * counts; it is measured only for its fuller metadata).
+ * counts; it is measured only for its fuller metadata). DC-134: sources with a size cached before DC-134 (no attachment
+ * figure) are measured again, after the unmeasured ones of the same rank: their rows already show a size.
  */
 export function sizeOrder(data: Data): string[] {
   const likely = new Set(allRows(data, LIKELY_STALE, { depsKnown: false }).filter((r) => r.stale).map((r) => r.source.id));
-  const rank = (s: Service) => (s.isView ? 2 : likely.has(s.id) ? 0 : 1);
-  return data.services.filter((s) => s.sizeMB === null)
+  const refresh = (s: Service) => s.sizeMB !== null && !s.isView && s.attachmentMB === undefined;
+  const rank = (s: Service) => (s.isView ? 4 : (likely.has(s.id) ? 0 : 2) + (refresh(s) ? 1 : 0));
+  return data.services.filter((s) => s.sizeMB === null || refresh(s))
     .map((s, i) => ({ s, i })).sort((a, b) => rank(a.s) - rank(b.s) || a.i - b.i).map((x) => x.s.id);
 }
 

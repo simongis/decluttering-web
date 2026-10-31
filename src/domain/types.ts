@@ -16,8 +16,15 @@ export interface BrokenRef { id: string; title: string; type: string; owner: str
 
 export interface Service {
   id: string; title: string; owner: string; created: string; modified: string;
+  /** DC-131: newest edit date across the service's layers and tables, as ISO. undefined: not read; null: read, no date. */
+  dataEdited?: string | null;
   /** Storage in MB. null: not measured yet (lazy sizing on big orgs, or a scan stopped early; DC-053). */
   sizeMB: number | null;
+  /**
+   * DC-134: of sizeMB, the attachments (the item's `subInfo`), billed as file storage. Absent: measured before DC-134
+   * or not at all, so counted as 0 (every byte at the feature rate).
+   */
+  attachmentMB?: number;
   access: string; isView: boolean; sourceId: string | null;
   /** [daysAgo, count] relative to org.scannedAt */
   usage: [number, number][];
@@ -73,6 +80,8 @@ export interface Row {
   daysSinceUpdate: number; lastModified: string;
   /** Known storage only: 0 (and 0 credits) while the source's size is not measured yet; see sizeKnown. */
   usedBy: number; sizeMB: number; credits: number; why: string;
+  /** DC-134: of sizeMB, the source's attachments, priced as file storage in credits. */
+  attachmentMB: number;
   /** False while the source's storage is not measured yet. Such rows are never hidden by "Size: at least". */
   sizeKnown: boolean;
   tidyHints: TidyHint[]; tidy: string | null;

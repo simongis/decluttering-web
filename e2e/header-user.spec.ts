@@ -147,11 +147,13 @@ test('demo: keyboard reaches the logo and the demo user; the menu offers "Leave 
   await page.goto('/#/demo');
   await expect(page.locator('dc-review [data-card]').first()).toBeVisible();
 
-  // From the top of the page: the logo link first, then About (DC-021), then the account button.
+  // From the top of the page: the logo link first, then About (DC-021), the theme toggle (DC-135), then the account button.
   await page.keyboard.press('Tab');
   await expect(page.locator('a.dc-home')).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(page.locator('[data-action="about"]')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('[data-action="skin-toggle"]')).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(page.locator('calcite-navigation-user')).toBeFocused();
   await expect(page.locator('calcite-navigation-user')).toHaveAttribute('label', 'Account menu for Demo admin');

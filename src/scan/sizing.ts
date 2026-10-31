@@ -42,11 +42,18 @@ const isBlocked = (e: unknown) => (e as Error | null)?.name === 'BlockedRequest'
 const allowed = (path: string) => { try { return assertAllowed(path, 'GET'); } catch { return false; } };
 export const userPath = (owner: string, folder?: string) => `content/users/${owner}${folder ? `/${folder}` : ''}`;
 
-/** What a listed item or content/items call says about storage; null when it has no real size (search-style -1). */
+/** Bytes of a numeric field as MB; 0 when missing, negative or not a number. */
+const mbOf = (v: unknown): number => { const n = Number(v); return typeof v === 'number' && Number.isFinite(n) && n > 0 ? n / MB : 0; };
+
+/**
+ * What a listed item or content/items call says about storage; null when it has no real size (search-style -1).
+ * DC-134: `subInfo` is the attachments' bytes (what the ArcGIS API for Python's `Item.attachments_size` returns), part of
+ * `size` and billed as file storage (docs/research/attachment-storage.md). Always set, so a cached 0 means "none".
+ */
 export function sizeInfoOf(it: Json): SizeInfo | null {
   const n = Number(it.size);
   if (it.size === undefined || it.size === null || !Number.isFinite(n) || n < 0) return null;
-  const z: SizeInfo = { sizeMB: n > 0 ? n / MB : 0 };
+  const z: SizeInfo = { sizeMB: n > 0 ? n / MB : 0, attachmentMB: mbOf(it.subInfo) };
   if (it.description) z.description = str(it.description);
   if (it.snippet) z.snippet = str(it.snippet);
   if (Array.isArray(it.tags)) z.tags = (it.tags as unknown[]).map(String);

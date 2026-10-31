@@ -1,4 +1,5 @@
 import type { Data, Service } from '../domain/types';
+import type { SizeInfo } from '../scan/types';
 import type { KeyValueStore } from './store';
 
 export const CACHE_TTL_DAYS = 7;
@@ -98,15 +99,16 @@ export function mapsToRead<T extends ModifiedItem>(
 
 /**
  * Sizes a lazy scan can take from the cache instead of measuring again (DC-053): services the last scan measured and
- * whose item has not been modified since. Everything else is measured.
+ * whose item has not been modified since. Everything else is measured. DC-134: a size cached before DC-134 has no
+ * attachment figure: it is reused as it is (so the review is complete at once) and sizeOrder refreshes it in the background.
  */
-export function sizesToReuse(current: Pick<Service, 'id' | 'modified'>[], previous: Pick<Data, 'services'> | undefined): Map<string, number> {
-  const out = new Map<string, number>();
+export function sizesToReuse(current: Pick<Service, 'id' | 'modified'>[], previous: Pick<Data, 'services'> | undefined): Map<string, SizeInfo> {
+  const out = new Map<string, SizeInfo>();
   if (!previous) return out;
   const before = new Map(previous.services.map((s) => [s.id, s]));
   for (const s of current) {
     const p = before.get(s.id);
-    if (p && p.sizeMB !== null && p.modified === s.modified) out.set(s.id, p.sizeMB);
+    if (p && p.sizeMB !== null && p.modified === s.modified) out.set(s.id, p.attachmentMB === undefined ? { sizeMB: p.sizeMB } : { sizeMB: p.sizeMB, attachmentMB: p.attachmentMB });
   }
   return out;
 }

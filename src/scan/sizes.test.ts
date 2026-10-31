@@ -70,7 +70,7 @@ describe('lazy sizing threshold', () => {
 describe('sizeOrder', () => {
   it('likely-stale sources first, then other sources, then views; skips sizes already known', async () => {
     const core = await scanCore(fake().request, { ...opts, lazySizeThreshold: 10 });
-    const known = withSizes(core.data, new Map([[ids[0] as string, { sizeMB: 5 }]]));
+    const known = withSizes(core.data, new Map([[ids[0] as string, { sizeMB: 5, attachmentMB: 0 }]]));
     const order = sizeOrder(known).map((id) => ids.indexOf(id));
     const stale = order.filter((k) => k % 2 === 0 && !isView(k));
     const rest = order.filter((k) => k % 2 === 1 && !isView(k));

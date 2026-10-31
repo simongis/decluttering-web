@@ -24,4 +24,4 @@ See use restrictions at <http://www.esri.com/legal/pdfs/mla_e204_e300/english>
 
 For additional information, refer to [Calcite's licensing](https://developers.arcgis.com/calcite-design-system/resources/licensing).
 
-Fonts (Fira Sans, Fira Mono, Roboto) are loaded from Google Fonts under the SIL Open Font License or Apache 2.0. Calcite's icons and translations are loaded from `js.arcgis.com`.
+Fonts (Fira Sans, Fira Mono, Roboto, and Antonio for the optional console look) are loaded from Google Fonts under the SIL Open Font License or Apache 2.0. Calcite's icons and translations are loaded from `js.arcgis.com`.

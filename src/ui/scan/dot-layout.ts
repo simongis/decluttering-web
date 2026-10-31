@@ -87,9 +87,9 @@ export function zoneBox(
 export const RAMP = { from: '#faa61a', mid: '#e0642f', to: '#b01f59' }; // Amber -> Raspberry
 const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const mix = (a: number[], b: number[], k: number) => a.map((v, i) => v + ((b[i] as number) - v) * k);
-const [cA, cM, cR] = [hex(RAMP.from), hex(RAMP.mid), hex(RAMP.to)] as [number[], number[], number[]];
-/** 0 (barely stale, amber) .. 1 (very stale, raspberry) */
-export function rampColour(k: number): string {
+/** 0 (barely stale, amber) .. 1 (very stale, raspberry). DC-135: the console look passes its own ramp. */
+export function rampColour(k: number, ramp: { from: string; mid: string; to: string } = RAMP): string {
+  const [cA, cM, cR] = [hex(ramp.from), hex(ramp.mid), hex(ramp.to)] as [number[], number[], number[]];
   k = clamp(k);
   const c = k < 0.5 ? mix(cA, cM, k * 2) : mix(cM, cR, (k - 0.5) * 2);
   return `rgb(${c.map(Math.round).join(',')})`;

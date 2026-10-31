@@ -65,7 +65,7 @@ describe('measureHybrid', () => {
     const f = org(svcs);
     const r = await run(svcs, f);
     expect(f.calls).toEqual(['content/users/amy']);
-    expect(r.sizes.get(svcs[2]!.id)).toEqual({ sizeMB: 3, description: 'About 02', tags: ['t'] });
+    expect(r.sizes.get(svcs[2]!.id)).toEqual({ sizeMB: 3, attachmentMB: 0, description: 'About 02', tags: ['t'] });
     expect(r.sizes.size).toBe(5);
     expect(r.plans.at(-1)).toBe(0);
   });
@@ -154,8 +154,8 @@ describe('measureHybrid', () => {
 
 describe('sizeInfoOf', () => {
   it('reads bytes as MB and treats -1 or a missing size as unknown', () => {
-    expect(sizeInfoOf({ size: 2 * MB })).toEqual({ sizeMB: 2 });
-    expect(sizeInfoOf({ size: 0 })).toEqual({ sizeMB: 0 });
+    expect(sizeInfoOf({ size: 2 * MB })).toEqual({ sizeMB: 2, attachmentMB: 0 });
+    expect(sizeInfoOf({ size: 0 })).toEqual({ sizeMB: 0, attachmentMB: 0 });
     expect(sizeInfoOf({ size: -1 })).toBeNull();
     expect(sizeInfoOf({})).toBeNull();
   });
