@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { carriedRefs, missingRefs, visibleBrokenRefs, type Known } from './broken-refs';
-import type { Data, Service } from './types';
+import { carriedRefs, missingRefs, ownerNamer, sortBrokenRefs, visibleBrokenRefs, type Known } from './broken-refs';
+import type { BrokenRef, Data, Owner, Service } from './types';
 
 const ORG = 'AbCdEf0123456789';
 const id = (c: string) => c.repeat(32);
@@ -96,5 +96,75 @@ describe('carriedRefs: maps not re-read keep their findings, checked again again
   });
   it('is empty without a previous scan', () => {
     expect(carriedRefs(undefined, listed('m1'), known())).toEqual([]);
+  });
+});
+
+describe('sortBrokenRefs (DC-137): the missing-layers table', () => {
+  const ref = (title: string, n: number, extra: Partial<BrokenRef> = {}): BrokenRef =>
+    ({ id: title.toLowerCase(), title, type: 'Web Map', owner: `u_${title}`, missing: Array.from({ length: n }, (_, i) => id(String(i))), ...extra });
+  const a = ref('Alpha', 1, { modified: '2026-01-05T00:00:00.000Z', owner: 'zed' });
+  const b = ref('Bravo', 3, { modified: '2025-06-01T00:00:00.000Z', owner: 'amy', contentStatus: 'deprecated' });
+  const c = ref('Charlie', 1, { owner: 'bob' }); // saved before DC-137: no date
+  const d = ref('Delta', 2, { modified: '2026-03-01T00:00:00.000Z', owner: 'cat', contentStatus: 'org_authoritative' });
+  const titles = (rs: readonly BrokenRef[]) => rs.map((r) => r.title);
+
+  it('default: most missing layers first, ties by title', () => {
+    expect(titles(sortBrokenRefs([a, c, d, b], 'missing', 'desc'))).toEqual(['Bravo', 'Delta', 'Alpha', 'Charlie']);
+    expect(titles(sortBrokenRefs([a, c, d, b], 'missing', 'asc'))).toEqual(['Alpha', 'Charlie', 'Delta', 'Bravo']);
+  });
+
+  it('by modified date, newest first; an unknown date goes last either way', () => {
+    expect(titles(sortBrokenRefs([a, b, c, d], 'modified', 'desc'))).toEqual(['Delta', 'Alpha', 'Bravo', 'Charlie']);
+    expect(titles(sortBrokenRefs([a, b, c, d], 'modified', 'asc'))).toEqual(['Bravo', 'Alpha', 'Delta', 'Charlie']);
+  });
+
+  it('by owner uses the name shown, not the username', () => {
+    const names: Record<string, string> = { zed: 'Ann Zed', amy: 'Zoe Amy', bob: 'Bob B', cat: 'Cat C' };
+    expect(titles(sortBrokenRefs([a, b, c, d], 'owner', 'asc', (u) => names[u] ?? u))).toEqual(['Alpha', 'Charlie', 'Delta', 'Bravo']);
+  });
+
+  it('by title, and by status: deprecated, then authoritative, then none', () => {
+    expect(titles(sortBrokenRefs([d, b, a, c], 'title', 'asc'))).toEqual(['Alpha', 'Bravo', 'Charlie', 'Delta']);
+    expect(titles(sortBrokenRefs([a, c, d, b], 'deprecated', 'desc'))).toEqual(['Bravo', 'Delta', 'Alpha', 'Charlie']);
+  });
+
+  it('does not change the list it was given', () => {
+    const list = [a, b];
+    sortBrokenRefs(list, 'missing', 'desc');
+    expect(titles(list)).toEqual(['Alpha', 'Bravo']);
+  });
+});
+
+describe('carriedRefs (DC-137): keeps the modified date and content status as listed today', () => {
+  it('copies them from the listing', () => {
+    const prev = { brokenRefs: [{ id: id('m'), title: 'Old', type: 'Web Map', owner: 'u', missing: [id('a')] }], services: [] } as unknown as Data;
+    const listed = new Map([[id('m'), { title: 'New', type: 'Web Map', owner: 'u', modified: '2026-02-01T00:00:00.000Z', contentStatus: 'deprecated' }]]);
+    expect(carriedRefs(prev, listed, known())).toEqual([{ id: id('m'), title: 'New', type: 'Web Map', owner: 'u', missing: [id('a')], modified: '2026-02-01T00:00:00.000Z', contentStatus: 'deprecated' }]);
+  });
+});
+
+describe('ownerNamer: one username -> name lookup per owner list (no find per sort comparison)', () => {
+  const o = (username: string, fullName: string): Owner => ({ username, fullName, disabled: false, thumbnail: null, lastNotified: null });
+  it('gives the full name, or the username when there is none or the owner is not listed', () => {
+    const name = ownerNamer([o('ann', 'Ann Lee'), o('bob', '')]);
+    expect(name('ann')).toBe('Ann Lee');
+    expect(name('bob')).toBe('bob');
+    expect(name('zed')).toBe('zed');
+  });
+  it('is built once per owner list, and does not walk the list per call', () => {
+    const owners = Array.from({ length: 4000 }, (_, i) => o(`u${i}`, `User ${i}`));
+    const name = ownerNamer(owners);
+    expect(ownerNamer(owners)).toBe(name);
+    let reads = 0;
+    const spy = new Proxy(owners, { get(t, k, r) { if (k === 'find') reads++; return Reflect.get(t, k, r); } });
+    const n2 = ownerNamer(spy);
+    for (let i = 0; i < 1000; i++) n2(`u${i}`);
+    expect(reads).toBe(0);
+    expect(n2('u3999')).toBe('User 3999');
+  });
+  it('sorts the missing-layers table by owner name through it', () => {
+    const ref = (id: string, owner: string): BrokenRef => ({ id, title: id, type: 'Web Map', owner, missing: ['x'] });
+    const name = ownerNamer([o('zz', 'Aaron'), o('aa', 'Zoe')]);
+    expect(sortBrokenRefs([ref('1', 'aa'), ref('2', 'zz')], 'owner', 'asc', name).map((r) => r.owner)).toEqual(['zz', 'aa']);
   });
 });

@@ -723,7 +723,7 @@ export class AppRoot extends LitElement {
       ${data && (!onScan || this.reviewMounted) ? html`
       <div ?hidden=${onScan || emails}>
         ${this.renderScanStatus()}
-        <div data-scan-state=${this.stopped ? 'stopped' : this.background ? 'running' : 'done'} data-demo="play">
+        <div data-scan-state=${this.stopped ? 'stopped' : this.background || this.flow.state === 'scanning' ? 'running' : 'done'} data-demo="play">
           ${renderReview({ data, mode: 'admin', canSeeUsage: true, depsKnown: this.depsKnown, stopped: this.stopped, emailsRoute: 'demo-emails' })}
         </div>
       </div>` : nothing}
@@ -856,7 +856,7 @@ export class AppRoot extends LitElement {
       ${data && (!onScan || this.reviewMounted) ? html`
       <div ?hidden=${onScan || view === 'emails'}>
       ${this.renderScanStatus()}
-      <div data-scan-state=${this.stopped ? 'stopped' : this.background ? 'running' : 'done'} data-read-only=${String(!a.writable)}>
+      <div data-scan-state=${this.stopped ? 'stopped' : this.background || this.flow.state === 'scanning' ? 'running' : 'done'} data-read-only=${String(!a.writable)}>
         ${!a.writable && a.mode !== 'my-items' ? html`<p role="note" data-note="read-only">${t('shell.access.readOnly')}</p>` : nothing}
         ${renderReview({ data, mode: a.mode, canSeeUsage: canSeeUsage(a.usageReadable), username: a.username, note: this.noteText, refreshing: this.refreshing, depsKnown: this.depsKnown, stopped: this.stopped, rescan: this.rescanOffer, onRescan: this.rescan })}
       </div>

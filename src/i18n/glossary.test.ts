@@ -4,7 +4,7 @@ import { es } from './es';
 // docs/i18n/glossary-es.md: the terms a Spanish change must not slip back to. Each rule says why; a key listed in `allow`
 // may use the word (it is the right term there).
 const RULES: { word: RegExp; why: string; allow?: RegExp }[] = [
-  { word: /obsolet/i, why: '"obsoleto" is Esri\'s word for Deprecated; stale is "sin uso reciente"', allow: /^review\.filter\.status\./ },
+  { word: /obsolet/i, why: '"obsoleto" is Esri\'s word for Deprecated; stale is "sin uso reciente"', allow: /^review\.(filter\.status\.|broken\.deprecated$)/ },
   { word: /añad/i, why: 'Esri writes "agregar"' },
   { word: /limpi/i, why: 'tidy up is "ordenar" (tone guide: never clean up)' },
   { word: /\bajustes\b/i, why: 'Settings is "Configuración"' },

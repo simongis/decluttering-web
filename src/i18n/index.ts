@@ -113,5 +113,6 @@ export function tnParts(key: MessageKey, count: number, params?: Record<string, 
 
 export function formatNumber(n: number, opts?: Intl.NumberFormatOptions): string { return new Intl.NumberFormat(current, opts).format(n); }
 export function formatDate(d: Date | number, opts: Intl.DateTimeFormatOptions = { dateStyle: 'medium', timeZone: 'UTC' }): string {
-  return new Intl.DateTimeFormat(current, opts).format(d);
+  // English dates read day first ("3 Oct"), as in the rest of the app; plain 'en' would give the US "Oct 3".
+  return new Intl.DateTimeFormat(current === 'en' ? 'en-AU' : current, opts).format(d);
 }

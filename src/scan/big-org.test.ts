@@ -56,6 +56,8 @@ describe('DC-071a engine', () => {
     await scanCore(f.request, opts);
     const first = f.calls.slice(0, 6).map((c) => c.path).sort();
     expect(first).toEqual(['portals/self/usage', 'portals/self/usage', 'portals/self/usage', 'portals/self/users', 'search', 'search']);
+    // DC-147: the two second-year windows go out later, never ahead of find
+    expect(f.calls.filter((c) => c.path === 'portals/self/usage')).toHaveLength(5);
   });
 
   it('reads Web Scenes as well as web maps and apps', async () => {

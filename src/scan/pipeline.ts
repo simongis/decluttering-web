@@ -4,9 +4,10 @@
 // DC-071a order (docs/research/large-org-scan.md): find, usage, owners and the first page of the maps-and-apps listing
 // start together at t=0; search pages are fetched in parallel once the first tells the total; views are traced as each
 // page lands; sizes use owner content listings where they pay off (sizing.ts); maps and apps are read last.
-import type { BrokenRef, Data, Dependency, Owner, Service } from '../domain/types';
+import type { BrokenRef, Data, Dependency, MapApps, Owner, Service } from '../domain/types';
 import { carriedRefs, missingRefs } from '../domain/broken-refs';
-import { PRESETS, allRows, evaluate } from '../domain/stale';
+import { PRESETS, USAGE_READ_DAYS, USAGE_RULE_DAYS, allRows, evaluate } from '../domain/stale';
+import { isMapType } from '../domain/connections';
 import { mapsToRead } from '../cache/scanCache';
 import { guardRequest } from './guard';
 import { LOG_NAME_RE, LOG_TAG, LOG_TITLE } from '../log/guard';
@@ -128,6 +129,17 @@ function withLimiter(inner: RequestFn, limiter: Limiter): RequestFn {
 
 const iso = (ms: unknown) => new Date(typeof ms === 'number' && ms > 0 ? ms : 0).toISOString();
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
+/** DC-137: what the missing-layers table shows beyond title, type and owner, from the map's or app's search row. */
+const listedExtras = (r: Item): { modified?: string; contentStatus?: string } => ({
+  ...(typeof r.modified === 'number' && r.modified > 0 ? { modified: iso(r.modified) } : {}),
+  ...(typeof r.contentStatus === 'string' && r.contentStatus ? { contentStatus: r.contentStatus } : {}),
+});
+/** DC-147c: a carried dependency with its date and status from the current search row (none listed: as it was). */
+const withListed = (d: Dependency, r: Item | undefined): Dependency => {
+  if (!r) return d;
+  const { modified: _m, contentStatus: _c, ...base } = d;
+  return { ...base, ...listedExtras(r) };
+};
 const urlName = (u: unknown) => /\/services\/([^/]+)\//i.exec(str(u))?.[1] ?? null;
 const rowKey = (r: Json) => str(r.id) || str(r.username);
 
@@ -224,23 +236,33 @@ export async function scanCore(request: RequestFn, opts: ScanOptions): Promise<C
   throwIfAborted(signal);
 
   // Usage, owners and the first page of maps and apps start with find: none of them needs the service list.
-  // 4. usage: whole org, 365 days, 3 windows of at most 150 days, newest first
+  // 4. usage: whole org, 730 days (DC-147: the second year is for the item panel), 5 windows of at most 150 days, newest first
   const end = now();
-  const windows: [number, number][] = [[end - 150 * DAY, end], [end - 300 * DAY, end - 150 * DAY], [end - 365 * DAY, end - 300 * DAY]];
+  const readDays = opts.usageDays ?? USAGE_READ_DAYS;
+  const windows = usageWindows(readDays);
   const usageByName = new Map<string, Map<number, number>>();
   let windowsRead = 0;
-  /** DC-083: a failed window makes last use unknown for layers whose lastViewed doesn't settle it (never flagged). */
+  /** DC-083: a failed window in the rule's year makes last use unknown for layers whose lastViewed doesn't settle it (never flagged). */
   let usageFailed = false;
+  /** DC-147: every failed window, as days-ago ranges: the panel says "not read" for them, never zero. */
+  const usageGaps: [number, number][] = [];
   meter.set('usage', 0, windows.length);
   progress('find', 0, 0, 'Finding hosted feature services…');
-  const usageP = Promise.all(windows.map(async ([a, b]) => {
+  const usageP = Promise.all(windows.map(async ([newest, oldest]) => {
+    // DC-147: the second year is for the item panel only. Its windows go out after find, owners and the maps listing have
+    // asked (a tick later), behind the search pages, so the review's first data is never kept waiting by them.
+    const year2 = newest >= USAGE_RULE_DAYS;
+    if (year2) await Promise.resolve();
     try {
-      const u = await call('portals/self/usage', { vars: 'num', groupby: 'name', etype: 'svcusg', stype: 'features', period: '1d', startTime: Math.round(a), endTime: Math.round(b) }, { priority: PRIORITY.core }) as Json;
+      const u = await call('portals/self/usage', { vars: 'num', groupby: 'name', etype: 'svcusg', stype: 'features', period: '1d', startTime: Math.round(end - oldest * DAY), endTime: Math.round(end - newest * DAY) }, { priority: year2 ? PRIORITY.views : PRIORITY.core }) as Json;
       mergeUsageWindow(usageByName, (u.data as UsageRow[] | undefined) ?? []);
     } catch (e) {
       if (isAbort(e) || isBlocked(e)) throw e;
-      usageFailed = true;
-      warnings.push('Part of the usage history could not be read, so some services may look less used than they are.');
+      usageGaps.push([newest, oldest]);
+      if (newest < USAGE_RULE_DAYS) {
+        usageFailed = true;
+        warnings.push('Part of the usage history could not be read, so some services may look less used than they are.');
+      } else warnings.push('Part of the second year of usage history could not be read; it shows as not read.');
     }
     windowsRead++;
     meter.set('usage', windowsRead, windows.length);
@@ -389,7 +411,8 @@ export async function scanCore(request: RequestFn, opts: ScanOptions): Promise<C
 
   let data: Data = {
     org: { id: orgId, name: opts.orgName ?? orgId, urlKey: opts.urlKey ?? '', scannedAt, ...(opts.customBaseUrl ? { customBaseUrl: opts.customBaseUrl } : {}) },
-    owners, services, usageComplete: !usageFailed,
+    owners, services, usageComplete: !usageFailed, usageDays: readDays,
+    ...(usageGaps.length ? { usageGaps: usageGaps.sort((a, b) => a[0] - b[0]) } : {}),
   };
   if (!lazy) data = withSizes(data, details);
   meter.core();
@@ -397,6 +420,16 @@ export async function scanCore(request: RequestFn, opts: ScanOptions): Promise<C
     data, warnings, depsKnown: false, sizesPending: lazy,
     ctx: { call, progress, orgId, byId: new Set(found.map((s) => s.id)), byName, depsMode, signal, meter, referrersFirst, where },
   };
+}
+
+/**
+ * DC-147: the usage windows, as [newest, oldest] days before the scan: 150 days at most each (what the API allows per call),
+ * newest first, back to USAGE_READ_DAYS. Five for two years: 0-150, 150-300, 300-450, 450-600, 600-730.
+ */
+export function usageWindows(days = USAGE_READ_DAYS, step = 150): [number, number][] {
+  const out: [number, number][] = [];
+  for (let a = 0; a < days; a += step) out.push([a, Math.min(days, a + step)]);
+  return out;
 }
 
 const SIZE_BATCH = 12;
@@ -509,6 +542,10 @@ export async function scanDependencies(core: CoreResult, o: DependencyOptions = 
   const depsOf = new Map<string, Dependency[]>();
   /** DC-035a: references to hosted layers that are gone, by map or app id. Only when the search saw every hosted feature service. */
   const lookForBroken = byId.size < SEARCH_CAP;
+  /** DC-147: web map and scene ids in the org (lowercase), each app's info, and the maps each app's /data names by id. */
+  const mapIds = new Set<string>();
+  const appInfo = new Map<string, Dependency>();
+  const appMaps = new Map<string, string[]>();
   const known = { hasId: (id: string) => byId.has(id), hasName: (n: string) => byName.has(n) };
   const broken = new Map<string, BrokenRef>();
   const readAt: Record<string, string> = {};
@@ -533,25 +570,42 @@ export async function scanDependencies(core: CoreResult, o: DependencyOptions = 
     if (sample) referrers = referrers.slice(0, Number(sample[1]));
     total = referrers.length;
     meter.set('listing', total, total);
+    // DC-147: the org's web maps and scenes, so an app's /data that names one by id records it (no extra request).
+    for (const r of referrers) {
+      if (isMapType(str(r.type))) mapIds.add(r.id.toLowerCase());
+      else appInfo.set(r.id, { id: r.id, title: str(r.title), type: str(r.type), owner: str(r.owner), ...listedExtras(r) });
+    }
 
     // Reuse the last scan's links for maps and apps that have not changed since they were read.
     let toRead = referrers;
     if (o.previous) {
       const prev = o.previous;
       const live = new Set(referrers.map((r) => r.id));
+      const listed = new Map(referrers.map((r) => [r.id, r]));
       const changed = new Set(mapsToRead(
         { fetchedAt: prev.fetchedAt, readAt: prev.readAt },
         referrers.map((r) => ({ id: r.id, modified: iso(r.modified) })),
       ).map((r) => r.id));
+      // DC-147: a scan saved before map references were recorded: its apps are read once more to find them.
+      const prevMapApps = prev.data.mapApps;
+      if (!prevMapApps) {
+        for (const r of referrers) if (!isMapType(str(r.type))) changed.add(r.id);
+      } else {
+        for (const [mapId, apps] of Object.entries(prevMapApps.byMap)) {
+          if (!mapIds.has(mapId)) continue;
+          for (const a of apps) if (live.has(a) && !changed.has(a)) appMaps.set(a, [...(appMaps.get(a) ?? []), mapId]);
+        }
+      }
       toRead = referrers.filter((r) => changed.has(r.id));
       reused = referrers.length - toRead.length;
       for (const r of referrers) if (!changed.has(r.id)) readAt[r.id] = prev.readAt?.[r.id] ?? prev.fetchedAt;
       for (const sv of prev.data.services) {
-        const keep = sv.dependencies.filter((d) => live.has(d.id) && !changed.has(d.id));
+        // DC-147c: the date and status as listed now (a reused map keeps its links; its row may be newer, or the scan older).
+        const keep = sv.dependencies.filter((d) => live.has(d.id) && !changed.has(d.id)).map((d) => withListed(d, listed.get(d.id)));
         if (keep.length && byId.has(sv.id)) depsOf.set(sv.id, keep);
       }
       if (lookForBroken) {
-        const asListed = new Map(referrers.filter((r) => !changed.has(r.id)).map((r) => [r.id, { title: str(r.title), type: str(r.type), owner: str(r.owner) }]));
+        const asListed = new Map(referrers.filter((r) => !changed.has(r.id)).map((r) => [r.id, { title: str(r.title), type: str(r.type), owner: str(r.owner), ...listedExtras(r) }]));
         for (const b of carriedRefs(prev.data, asListed, known)) broken.set(b.id, b);
       }
       if (depsOf.size) o.onBatch?.({ dependencies: snapshot(), done: reused, total, final: !toRead.length });
@@ -587,9 +641,15 @@ export async function scanDependencies(core: CoreResult, o: DependencyOptions = 
         return;
       }
       const hit = new Set<string>();
-      for (const m of text.matchAll(/[0-9a-f]{32}/g)) if (byId.has(m[0])) hit.add(m[0]);
+      const isApp = !isMapType(str(r.type));
+      const viaMaps = new Set<string>();
+      for (const m of text.matchAll(/[0-9a-f]{32}/g)) {
+        if (byId.has(m[0])) hit.add(m[0]);
+        else if (isApp && mapIds.has(m[0])) viaMaps.add(m[0]);
+      }
+      if (viaMaps.size) appMaps.set(r.id, [...viaMaps]);
       for (const m of text.matchAll(/\/services\/([^/"'\\?]+)\//g)) for (const id of byName.get(m[1] as string) ?? []) hit.add(id);
-      const dep: Dependency = { id: r.id, title: str(r.title), type: str(r.type), owner: str(r.owner) };
+      const dep: Dependency = { id: r.id, title: str(r.title), type: str(r.type), owner: str(r.owner), ...listedExtras(r) };
       for (const id of hit) depsOf.set(id, [...(depsOf.get(id) ?? []), dep]);
       // The text was lowercased above; refs and names compare in lowercase.
       const missing = lookForBroken ? missingRefs(text, orgId, known) : [];
@@ -607,9 +667,29 @@ export async function scanDependencies(core: CoreResult, o: DependencyOptions = 
   }
   if (unreadable) warnings.push(`${unreadable} map${unreadable === 1 ? '' : 's'} or app${unreadable === 1 ? '' : 's'} could not be read, so some services may look less used than they are.`);
   const brokenRefs = lookForBroken ? [...broken.values()] : undefined;
+  const mapApps = compactMapApps(appMaps, appInfo);
   // The session composes its Data from core.data, so the references travel with it (the stopped flag tells Review how far to trust them).
-  if (brokenRefs) core.data = { ...core.data, brokenRefs };
-  return { dependencies: depsOf, warnings, read, reused, total, readAt, stopped, ...(brokenRefs ? { brokenRefs } : {}) };
+  core.data = { ...core.data, ...(brokenRefs ? { brokenRefs } : {}), mapApps };
+  return { dependencies: depsOf, warnings, read, reused, total, readAt, stopped, ...(brokenRefs ? { brokenRefs } : {}), mapApps };
+}
+
+/**
+ * DC-147: app -> maps, turned into what the saved scan keeps: map id -> app ids (sorted), and each app once. Every reference
+ * to a map in the org is kept (not only maps that link a layer today), so an app that is not read again stays right when its
+ * map gains a layer.
+ */
+function compactMapApps(appMaps: ReadonlyMap<string, readonly string[]>, info: ReadonlyMap<string, Dependency>): MapApps {
+  const byMap: Record<string, string[]> = {};
+  const apps: Dependency[] = [];
+  for (const [app, maps] of appMaps) {
+    const a = info.get(app);
+    if (!a || !maps.length) continue;
+    apps.push(a);
+    for (const m of maps) (byMap[m] ??= []).push(app);
+  }
+  for (const k of Object.keys(byMap)) byMap[k]?.sort();
+  apps.sort((x, y) => x.id.localeCompare(y.id));
+  return { byMap, apps };
 }
 
 /** The whole scan in one go (core, sizes when deferred, then dependencies). The app uses the steps separately. */

@@ -10,6 +10,19 @@ const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 test.setTimeout(120_000);
 test.beforeEach(async ({ page }) => { await page.addInitScript(() => { (window as unknown as { __DC_DEMO_FAST__?: boolean }).__DC_DEMO_FAST__ = true; }); });
 
+// FB-92: a first-time visitor gets the standard light look, even when their computer is set to dark mode.
+test('a new visitor with a dark-mode computer still gets the standard light look', async ({ browser }) => {
+  const ctx = await browser.newContext({ colorScheme: 'dark' });
+  const page = await ctx.newPage();
+  await page.goto('/');
+  const html = page.locator('html');
+  await expect(html).toHaveClass(/calcite-mode-light/);
+  await expect(html).not.toHaveClass(/calcite-mode-dark/);
+  await expect(html).not.toHaveAttribute('data-skin', /.*/);
+  expect(await page.evaluate(() => localStorage.getItem('decluttering:skin'))).toBeNull();
+  await ctx.close();
+});
+
 test('standard by default; the header toggle turns the console look on, it survives a reload, and toggles back', async ({ page }) => {
   await page.goto('/#/about');
   const html = page.locator('html');

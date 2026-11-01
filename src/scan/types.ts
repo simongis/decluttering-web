@@ -1,4 +1,4 @@
-import type { BrokenRef, Data, Dependency } from '../domain/types';
+import type { BrokenRef, Data, Dependency, MapApps } from '../domain/types';
 
 export type Method = 'GET' | 'POST';
 
@@ -97,6 +97,8 @@ export interface ScanOptions {
   depsMode?: DepsMode;
   /** Above this many services the core skips sizing; scanSizes measures them afterwards (DC-053). Default LAZY_SIZE_THRESHOLD. */
   lazySizeThreshold?: number;
+  /** DC-147: days of usage history to read (default USAGE_READ_DAYS, 730). Tests and the perf check compare with 365. */
+  usageDays?: number;
   /** Test hooks. */
   now?: () => number;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
@@ -152,6 +154,8 @@ export interface DependencyResult {
   readAt: Record<string, string>;
   /** DC-035a: maps and apps pointing at hosted layers that are gone (what was read or reused; see domain/broken-refs.ts). Absent when maps were not read. */
   brokenRefs?: BrokenRef[];
+  /** DC-147: apps that name a web map or scene by id (read now or carried from `previous`). Absent when maps were not read. */
+  mapApps?: MapApps;
   /** True when aborted after the core: the result holds what was read so far, and is not complete. */
   stopped: boolean;
 }

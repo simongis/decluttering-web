@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnerGroup, Row } from '../../domain/types';
 import { PRESETS } from '../../domain/stale';
-import { itemOn, sayCredits, sayRule, saySize, sayWhy, selectionOf, sparkGeometry } from './helpers';
+import { itemOn, sayCredits, sayRule, saySize, sayWhy, selectionOf } from './helpers';
 
 const row = (id: string, views = 0): Row => ({
   source: { id }, views: new Array(views).fill({}), credits: 2, sizeMB: 10,
@@ -27,16 +27,6 @@ describe('selectionOf', () => {
     expect(s.items).toEqual(['1', '2']);
     expect(s.services).toBe(4);
     expect(s.credits).toBe(4);
-  });
-});
-
-describe('sparkGeometry', () => {
-  it('draws a minimum-height bar, and a flat tick for zero', () => {
-    const g = sparkGeometry([0, 1, 7]);
-    expect(g.bars[0]).toMatchObject({ zero: true, h: 1 });
-    expect(g.bars[1]?.h).toBeGreaterThanOrEqual(2);
-    expect(g.bars[2]).toMatchObject({ y: 3 });
-    expect(g.total).toBe(8);
   });
 });
 

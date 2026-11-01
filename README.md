@@ -2,7 +2,7 @@
 
 **Tidy up your ArcGIS Online content, gently.**
 
-https://simongis.github.io/decluttering-web/
+### [**Open the app →**](https://simongis.github.io/decluttering-web/)
 
 Decluttering finds the hosted feature layers in your org that nobody seems to use, shows you why each one was picked out and what it costs in credits, and helps you send each owner **one friendly email** about them. Owners decide what happens to their own layers. The app **never deletes, moves or changes anyone's items**.
 
@@ -83,6 +83,12 @@ Each layer says why it's on the list, roughly what it costs in **credits a month
 The figures are estimates for the month. Organization › Status › Storage in ArcGIS Online shows what was actually billed.
 
 **What "last used" means.** It is the newer of two dates ArcGIS Online keeps for a layer and its hosted views: when it was last opened (its item page, Map Viewer, or a map or app that uses it), and the last day its data was requested by anything, including scripts. Days when a crawler touched hundreds of layers at once are set aside. When the app can't be sure, it leans towards "used": a layer whose usage couldn't be fully read is **never** picked out.
+
+**Click a layer to see its story.** Each row shows a year of monthly usage bars. Click them for a panel with the days the layer's data was requested (a calendar or monthly bars, over 12 months or 2 years) and everything that uses it: its views, the maps and apps that use it directly or through a map, and, from ArcGIS Online, offline map areas and Survey123 forms. Counts are approximate (ArcGIS Online doesn't count some requests, or exports), so the days used lead. Opening the panel costs no credits and doesn't count as use.
+
+![A row's monthly usage bars, with the hover card showing requests per month](docs/images/row-bars.png)
+
+![The panel for one layer: a calendar of the days it was used, and the views, maps, apps and offline areas that use it](docs/images/item-panel.png)
 
 It also points out **maps and apps that refer to a layer that is no longer in your org**, which is worth fixing whatever you decide about the rest:
 
@@ -197,6 +203,11 @@ Checks: `npm run typecheck && npm run lint && npm test && npm run e2e`.
 [Calcite Design System](https://developers.arcgis.com/calcite-design-system/), [ArcGIS REST JS](https://developers.arcgis.com/arcgis-rest-js/), [Lit](https://lit.dev/), [D3](https://d3js.org/) and [Driver.js](https://driverjs.com/), with Vite and TypeScript. Third-party notices: `LICENSES.md`.
 
 ## Version
+
+**1.3.0** (2 November 2026):
+- **Click a layer for its story.** Monthly usage bars on every row; click for a panel with a usage calendar or monthly bars (12 months or 2 years) and everything that uses the layer, including offline map areas and Survey123 forms.
+- **Usage you can trust.** Days used lead, counts say "about", and crawler days never look like use. What counts as stale is unchanged.
+- **Missing layers as a sortable table** (issue #2).
 
 **1.2.0** (31 October 2026):
 - **Spanish.** The app now comes in Español as well as English, contributed by Aitor Calero (@aitorcalero). It follows your ArcGIS Online language, and you can change it in the account menu. Owner emails stay in English for now. See `CONTRIBUTING.md` to add a language.

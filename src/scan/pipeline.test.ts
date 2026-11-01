@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { evaluate } from '../domain/stale';
 import { BlockedRequest } from './guard';
-import { SEARCH_CAP, mergeUsageWindow, scanOrg } from './pipeline';
+import { SEARCH_CAP, mergeUsageWindow, scanOrg, usageWindows } from './pipeline';
 import type { RequestFn, ScanProgress } from './types';
 
 const NOW = Date.parse('2026-10-10T00:00:00Z');
@@ -186,18 +186,20 @@ describe('usage', () => {
     expect((find(r, ROADS) as unknown as { usage: unknown }).usage).toEqual([]);
   });
 
-  it('asks for the whole org (no name) in 3 daily windows covering 365 days, via POST', async () => {
+  it('DC-147: asks for the whole org (no name) in 5 daily windows covering 730 days, via POST', async () => {
     const f = fakeOrg();
-    await scanOrg(f.request, opts);
+    const r = await scanOrg(f.request, opts);
+    expect(r.data.usageDays).toBe(730);
+    expect(r.data).not.toHaveProperty('usageGaps');
     const u = f.calls.filter((c) => c.path === 'portals/self/usage');
-    expect(u).toHaveLength(3);
+    expect(u).toHaveLength(5);
     for (const c of u) {
       expect(c.method).toBe('POST');
       expect(c.params).toMatchObject({ period: '1d', etype: 'svcusg', stype: 'features', groupby: 'name' });
       expect(c.params).not.toHaveProperty('name');
       expect(Number(c.params.endTime) - Number(c.params.startTime)).toBeLessThanOrEqual(150 * DAY);
     }
-    expect(Math.min(...u.map((c) => Number(c.params.startTime)))).toBe(NOW - 365 * DAY);
+    expect(Math.min(...u.map((c) => Number(c.params.startTime)))).toBe(NOW - 730 * DAY);
     expect(Math.max(...u.map((c) => Number(c.params.endTime)))).toBe(NOW);
   });
 
@@ -248,12 +250,75 @@ describe('usage', () => {
   });
 });
 
+describe('DC-147: two years of usage', () => {
+  it('reads the second year into usage (days ago) like the first', async () => {
+    const f = fakeOrg({ 'portals/self/usage': async (_p, params) => {
+      const a = Number(params?.startTime), b = Number(params?.endTime);
+      return { data: [{ name: 'Parks', num: [[NOW - 5 * DAY, '3'], [NOW - 500 * DAY, '8'], [NOW - 729 * DAY, '1']].filter(([t]) => (t as number) >= a && (t as number) <= b) }] };
+    } });
+    const r = await scanOrg(f.request, opts);
+    expect((find(r, PARKS) as unknown as { usage: unknown }).usage).toEqual([[5, 3], [500, 8], [729, 1]]);
+  });
+
+  it('a failed window in the second year is a gap, not "usage incomplete": the rule is not touched', async () => {
+    const f = fakeOrg({ 'portals/self/usage': async (_p, params) => {
+      if (Number(params?.endTime) === NOW - 450 * DAY) throw Object.assign(new Error('bad'), { status: 400 });
+      return usageWindow(Number(params?.startTime), Number(params?.endTime));
+    } });
+    const r = await scanOrg(f.request, opts);
+    expect(r.data.usageComplete).toBe(true);
+    expect(r.data.usageGaps).toEqual([[450, 600]]);
+    expect(r.warnings.join(' ')).toMatch(/second year/);
+  });
+
+  it('a failed window that reaches into the first year marks usage incomplete, and is a gap', async () => {
+    const f = fakeOrg({ 'portals/self/usage': async (_p, params) => {
+      const b = Number(params?.endTime);
+      if (b === NOW - 300 * DAY || b === NOW) throw Object.assign(new Error('bad'), { status: 400 });
+      return usageWindow(Number(params?.startTime), b);
+    } });
+    const r = await scanOrg(f.request, opts);
+    expect(r.data.usageComplete).toBe(false);
+    expect(r.data.usageGaps).toEqual([[0, 150], [300, 450]]);
+  });
+
+  it('usageWindows: at most 150 days each, newest first, back to the days asked for', () => {
+    expect(usageWindows()).toEqual([[0, 150], [150, 300], [300, 450], [450, 600], [600, 730]]);
+    expect(usageWindows(365)).toEqual([[0, 150], [150, 300], [300, 365]]);
+  });
+});
+
 describe('dependencies', () => {
   it('finds item ids and service urls (any case) in the /data text', async () => {
     const r = await scanOrg(fakeOrg().request, opts);
     expect((find(r, PARKS) as unknown as { dependencies: unknown }).dependencies).toEqual([{ id: MAP1, title: 'Park map', type: 'Web Map', owner: 'alice' }]);
     expect((find(r, ROADS) as unknown as { dependencies: unknown }).dependencies).toEqual([{ id: DASH, title: 'Roads board', type: 'Dashboard', owner: 'bob' }]);
     expect((find(r, PARKS_VIEW) as unknown as { dependencies: unknown[] }).dependencies).toEqual([]);
+  });
+
+  it('DC-147: records the web maps an app names by id (map id -> app ids), and nothing for maps or unknown ids', async () => {
+    const f = fakeOrg({ [`content/items/${DASH}/data`]: async () => JSON.stringify({ widgets: [{ itemId: MAP1 }, { itemId: 'f'.repeat(32) }, { url: SVC('roads') + '/0' }] }) });
+    const r = await scanOrg(f.request, opts);
+    expect(r.data.mapApps).toEqual({ byMap: { [MAP1]: [DASH] }, apps: [{ id: DASH, title: 'Roads board', type: 'Dashboard', owner: 'bob' }] });
+    // still a direct link for the layer it names by url
+    expect((find(r, ROADS) as unknown as { dependencies: { id: string }[] }).dependencies.map((d) => d.id)).toEqual([DASH]);
+  });
+
+  it('DC-147c: a dependency carries its modified date and content status from the search row (no extra request)', async () => {
+    const f = fakeOrg({ search: async (_p, params = {}) => {
+      const q = String(params.q);
+      if (q.includes('Feature Service')) return { total: 3, nextStart: -1, results: searchServices };
+      return { total: 3, nextStart: -1, results: searchMaps.map((m) => (m.id === MAP1 ? { ...m, modified: NOW - 9 * DAY, contentStatus: 'deprecated' } : m)) };
+    } });
+    const r = await scanOrg(f.request, opts);
+    expect((find(r, PARKS) as unknown as { dependencies: unknown }).dependencies)
+      .toEqual([{ id: MAP1, title: 'Park map', type: 'Web Map', owner: 'alice', modified: new Date(NOW - 9 * DAY).toISOString(), contentStatus: 'deprecated' }]);
+    expect(f.calls.filter((c) => c.path === `content/items/${MAP1}`)).toHaveLength(0);
+  });
+
+  it('DC-147: no map references found is an empty record (looked for), not absent', async () => {
+    const r = await scanOrg(fakeOrg().request, opts);
+    expect(r.data.mapApps).toEqual({ byMap: {}, apps: [] });
   });
 
   it('does not match a longer service name that merely starts with the same letters', async () => {
@@ -370,7 +435,7 @@ describe('progress', () => {
     expect(events.slice(firstRead).every((e) => e.phase === 'deps')).toBe(true);
     expect(events.find((e) => e.phase === 'size' && e.done === 3)).toMatchObject({ total: 3, message: 'Measuring storage, 3 of 3' });
     // FB-19: the usage line counts date ranges read, not "range n of 3".
-    expect(events.filter((e) => e.phase === 'usage').map((e) => e.message)).toEqual([1, 2, 3].map((n) => `Looking at when each was last used, ${n} of 3 date ranges read`));
+    expect(events.filter((e) => e.phase === 'usage').map((e) => e.message)).toEqual([1, 2, 3, 4, 5].map((n) => `Looking at when each was last used, ${n} of 5 date ranges read`));
     const last = events.filter((e) => e.phase === 'deps').at(-1);
     expect(last).toMatchObject({ done: 3, total: 3, message: 'Checking which maps use them, 3 of 3' });
     for (const e of events) expect(e.message).not.toMatch(/undefined|NaN|\[object/);

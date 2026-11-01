@@ -17,7 +17,7 @@
 // A layer that only carries an item id (no url) is never reported: it could be any item type the search does not list.
 
 import type { AccessMode } from '../auth/access';
-import type { BrokenRef, Data } from './types';
+import type { BrokenRef, Data, Owner } from './types';
 
 const HEX32 = /^[0-9a-f]{32}$/;
 
@@ -59,13 +59,16 @@ export function missingRefs(text: string, orgId: string, known: Known): string[]
   return [...out].sort();
 }
 
+/** A map or app as listed by today's search (DC-137 adds its modified date and content status). */
+type Listed = Pick<BrokenRef, 'title' | 'type' | 'owner' | 'modified' | 'contentStatus'>;
+
 const stillMissing = (k: string, known: Known): boolean => (k.startsWith('name:') ? !known.hasName(k.slice(5)) : !known.hasId(k));
 
 /**
  * For maps and apps that were NOT read this time (unchanged since the last read): what the last scan found, checked again
  * against today's layers, plus layers that map used to link to that have since gone. `reused` is those maps as listed today.
  */
-export function carriedRefs(prev: Data | undefined, reused: ReadonlyMap<string, { title: string; type: string; owner: string }>, known: Known): BrokenRef[] {
+export function carriedRefs(prev: Data | undefined, reused: ReadonlyMap<string, Listed>, known: Known): BrokenRef[] {
   if (!prev || !reused.size) return [];
   const gone = new Map<string, Set<string>>();
   for (const s of prev.services) {
@@ -79,8 +82,8 @@ export function carriedRefs(prev: Data | undefined, reused: ReadonlyMap<string, 
   }
   for (const [id, ks] of gone) for (const k of ks) missing.set(id, (missing.get(id) ?? new Set()).add(k));
   return [...missing].map(([id, ks]) => {
-    const r = reused.get(id) as { title: string; type: string; owner: string };
-    return { id, title: r.title, type: r.type, owner: r.owner, missing: [...ks].sort() };
+    const r = reused.get(id) as Listed;
+    return { id, title: r.title, type: r.type, owner: r.owner, missing: [...ks].sort(), ...(r.modified ? { modified: r.modified } : {}), ...(r.contentStatus ? { contentStatus: r.contentStatus } : {}) };
   });
 }
 
@@ -95,4 +98,45 @@ export function visibleBrokenRefs(data: Data, o: { depsComplete: boolean; mode: 
     .map((b) => ({ ...b, missing: b.missing.filter((k) => k.startsWith('name:') || !ids.has(k)) }))
     .filter((b) => b.missing.length > 0)
     .sort((a, b) => a.owner.localeCompare(b.owner) || a.title.localeCompare(b.title));
+}
+
+/** DC-137: Status column order: deprecated, then authoritative (org or public), then none. */
+const statusRank = (s: string | undefined): number => (s === 'deprecated' ? 2 : s === 'org_authoritative' || s === 'public_authoritative' ? 1 : 0);
+
+/** DC-137: the columns the missing-layers table can sort by ('deprecated' is the Status column). */
+export type BrokenSortKey = 'title' | 'owner' | 'missing' | 'modified' | 'deprecated';
+export type SortDir = 'asc' | 'desc';
+
+/**
+ * DC-137: a sorted copy for the missing-layers table (default: most missing layers first). Ties go by title, then id, so the
+ * order is stable. A map with no known modified date (a scan saved before DC-137) goes last in either direction.
+ */
+export function sortBrokenRefs(refs: readonly BrokenRef[], key: BrokenSortKey, dir: SortDir, ownerName: (u: string) => string = (u) => u): BrokenRef[] {
+  const sign = dir === 'asc' ? 1 : -1;
+  const byTitle = (a: BrokenRef, b: BrokenRef) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id);
+  const primary = (a: BrokenRef, b: BrokenRef): number => {
+    switch (key) {
+      case 'missing': return sign * (a.missing.length - b.missing.length);
+      case 'modified':
+        if (!a.modified || !b.modified) return Number(!a.modified) - Number(!b.modified);
+        return sign * a.modified.localeCompare(b.modified);
+      case 'owner': return sign * ownerName(a.owner).localeCompare(ownerName(b.owner));
+      case 'deprecated': return sign * (statusRank(a.contentStatus) - statusRank(b.contentStatus));
+      case 'title': return sign * byTitle(a, b);
+    }
+  };
+  return [...refs].sort((a, b) => primary(a, b) || byTitle(a, b));
+}
+
+const namers = new WeakMap<readonly Owner[], (u: string) => string>();
+/** Username -> full name (or the username when there is none), built once per owner list: a big org has thousands of owners. */
+export function ownerNamer(owners: readonly Owner[]): (u: string) => string {
+  let f = namers.get(owners);
+  if (!f) {
+    const m = new Map<string, string>();
+    for (const o of owners) if (!m.has(o.username)) m.set(o.username, o.fullName);
+    f = (u: string) => m.get(u) || u;
+    namers.set(owners, f);
+  }
+  return f;
 }

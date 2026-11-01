@@ -4,6 +4,7 @@
 // which is why it lives here and not in src/dev/ (that folder re-exports it for the dev simulator).
 import type { RequestFn, RequestOptions } from '../scan/types';
 import type { Data } from '../domain/types';
+import { setFakeRelated } from '../ui/review/related-fake';
 
 const DAY = 864e5;
 const MB = 1024 * 1024;
@@ -27,6 +28,11 @@ export interface SimulatedOrgConfig {
    * services, maps and usage stay put (the extras use their own random stream).
    */
   brokenMaps?: number;
+  /**
+   * DC-147: apps (dashboards, instant apps, experiences, stories) that show layers through a web map named by id, appended
+   * after every other map and app. Default: 1 per 10 maps. Some also name one of the map's layers directly. Own random stream.
+   */
+  appsViaMaps?: number;
   seed: number;
   orgId: string;
   orgName: string;
@@ -68,7 +74,7 @@ export interface SimItem {
   lastViewed?: number | null;
   /** DC-083: services only. Views all time. */
   numViews?: number;
-  /** GH-2: services only. Esri's content status badge, e.g. 'deprecated'. */
+  /** GH-2: Esri's content status badge, e.g. 'deprecated'. Services, and (DC-137) one map with missing layers. */
   contentStatus?: string;
 }
 
@@ -260,13 +266,15 @@ export function createSimulatedOrg(partial: Partial<SimulatedOrgConfig> = {}): S
            { itemId: bhex(32), title: 'World Hillshade', url: 'https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer' },
            { itemId: lv.id, title: lv.title, url: `${lv.url}/0` }]
         : [{ itemId: lv.id, title: lv.title, url: `${lv.url}/0` },
-           { itemId: bhex(32), title: gone, url: `https://services.arcgis.com/${config.orgId}/arcgis/rest/services/${gone.replace(/\s+/g, '_')}/FeatureServer/0` }];
+           // DC-137: 1, 3, 2, ... layers gone, so the table's default sort (most missing first) has something to do.
+           ...Array.from({ length: [1, 3, 2][k % 3] as number }, (_, j) => ({ itemId: bhex(32), title: `${gone}${j ? ` ${j + 1}` : ''}`, url: `https://services.arcgis.com/${config.orgId}/arcgis/rest/services/${gone.replace(/\s+/g, '_')}${j ? `_${j + 1}` : ''}/FeatureServer/0` }))];
       const id = bhex(32);
       const modDays = 30 + k * 41;
       refs.set(id, [JSON.stringify({ operationalLayers: layers, baseMap: { title: 'Topographic' }, version: '2.28' })]);
       maps.push({
         id, title: decoy ? title : `${title}${k >= GONE.length ? ` ${k + 1}` : ''}`, owner: (owners[1 + (k * 3) % (owners.length - 1)] as { username: string }).username, type, typeKeywords: [], created: anchor - (modDays + 200) * DAY,
         modified: anchor - modDays * DAY, access: 'org', tags: [], snippet: '', description: '', size: 0,
+        ...(k === 1 ? { contentStatus: 'deprecated' } : k === 2 ? { contentStatus: 'org_authoritative' } : {}),
       });
     }
   }
@@ -321,6 +329,30 @@ export function createSimulatedOrg(partial: Partial<SimulatedOrgConfig> = {}): S
     if (sweepAt <= clock()) s.lastViewed = Math.max(s.lastViewed, sweepAt);
   }
 
+  // DC-147: the second year of usage (days 365 to 729), its own random stream, so the first year and everything else a seed
+  // made stay put. Never newer than lastViewed (a request moves it), never before the layer existed, none for a blank
+  // lastViewed (no use since Nov 2022). Busy layers were busy then too; some idle layers were last used in the second year.
+  // Two second-year sweep days touch most layers that were opened by then.
+  const y2 = seeded(config.seed + 147);
+  const Y1 = 365, Y2 = 730;
+  const sweeps2 = [400 + Math.floor(y2() * 100), 600 + Math.floor(y2() * 100)];
+  for (const s of services) {
+    if (typeof s.lastViewed !== 'number') continue;
+    const kind = kindOf.get(s.id) ?? 'dead';
+    const lvAgo = Math.max(0, Math.floor((anchor - s.lastViewed) / DAY));
+    const lo = Math.max(Y1, lvAgo), hi = Math.min(Y2 - 1, Math.floor((anchor - s.created) / DAY));
+    if (lo > hi) continue;
+    const r = y2();
+    const want = kind === 'daily' ? 150 + Math.floor(r * 150) : kind === 'regular' ? 20 + Math.floor(r * 100)
+      : kind === 'occasional' ? 3 + Math.floor(r * 17) : kind === 'rare' ? 1 + Math.floor(r * 3)
+      : lvAgo >= Y1 && r < 0.6 ? 5 + Math.floor(y2() * 55) : 0; // went quiet: used in the second year, not since
+    const days = new Map<number, number>();
+    for (let guard = 0; days.size < Math.min(want, hi - lo + 1) && guard < 3000; guard++) days.set(lo + Math.floor(y2() * (hi - lo + 1)), 1 + Math.floor(Math.pow(y2(), 2.5) * 400));
+    for (const d of sweeps2) if (d >= lo && d <= hi && !days.has(d) && y2() < 0.8) days.set(d, 1 + Math.floor(y2() * 3));
+    if (!days.size) continue;
+    usage.set(s.id, [...(usage.get(s.id) ?? []), ...days].sort((a, b) => a[0] - b[0]));
+  }
+
   const unreadable = new Set<string>();
   const unreadableCount = Math.min(maps.length, config.unreadableMaps ?? Math.max(1, Math.round(maps.length / 600)));
   for (let i = 0; i < unreadableCount; i++) unreadable.add(maps[Math.floor((i + 0.5) * maps.length / unreadableCount)]!.id);
@@ -358,6 +390,44 @@ export function createSimulatedOrg(partial: Partial<SimulatedOrgConfig> = {}): S
     }
   }
   for (const it of [...services, ...maps, ...extras]) place(it);
+
+  // DC-147: apps that show layers through a web map named by id (the item panel's "Through a map"), appended last with their
+  // own random stream, so every map, folder and unreadable pick a seed made stays put. They live in their owner's root folder.
+  const ar = seeded(config.seed + 1470);
+  const ahex = (n: number) => Array.from({ length: n }, () => Math.floor(ar() * 16).toString(16)).join('');
+  const webMaps = maps.filter((m) => m.type === 'Web Map' && !unreadable.has(m.id));
+  const layerIds = (mapId: string): string[] => {
+    try { return ((JSON.parse((refs.get(mapId) ?? ['{}'])[0] as string) as { operationalLayers?: { itemId?: string }[] }).operationalLayers ?? []).map((l) => l.itemId).filter((x): x is string => !!x); }
+    catch { return []; }
+  };
+  const appsOf = new Map<string, SimItem[]>();
+  const viaCount = webMaps.length ? Math.max(0, Math.round(config.appsViaMaps ?? mapCount / 10)) : 0;
+  const APP_KINDS: [string, string][] = [['Dashboard', 'Dashboard'], ['Web Mapping Application', 'Viewer'], ['Web Experience', 'Explorer'], ['StoryMap', 'Story'], ['Dashboard', 'Board']];
+  for (let i = 0; i < viaCount; i++) {
+    const [type, word] = APP_KINDS[Math.floor(ar() * APP_KINDS.length)] as [string, string];
+    const through = [webMaps[Math.floor(Math.pow(ar(), 1.5) * webMaps.length)] as SimItem];
+    if (ar() < 0.25) { const m2 = webMaps[Math.floor(ar() * webMaps.length)] as SimItem; if (m2 !== through[0]) through.push(m2); }
+    const own = layerIds((through[0] as SimItem).id);
+    const direct = own.length && ar() < 0.3 ? own[Math.floor(ar() * own.length)] : undefined; // also names a layer directly
+    const ids = through.map((m) => m.id);
+    const body = type === 'Dashboard' ? { widgets: [...ids.map((itemId) => ({ type: 'mapWidget', itemId })), ...(direct ? [{ type: 'listWidget', datasets: [{ dataSource: { itemId: direct } }] }] : [])] }
+      : type === 'Web Mapping Application' ? { values: { webmap: ids[0], ...(direct ? { layers: [direct] } : {}) } }
+      : type === 'Web Experience' ? { dataSources: Object.fromEntries([...ids.map((itemId, k) => [`map${k}`, { itemId, type: 'WEB_MAP' }]), ...(direct ? [['layer', { itemId: direct, type: 'FEATURE_LAYER' }]] : [])]) }
+      : { resources: Object.fromEntries([...ids.map((itemId, k) => [`r-map${k}`, { type: 'webmap', data: { itemId } }]), ...(direct ? [['r-layer', { type: 'layer', data: { itemId: direct } }]] : [])]) };
+    const id = ahex(32);
+    refs.set(id, [JSON.stringify(body)]);
+    const r = ar() * (cum[cum.length - 1] as number);
+    let lo = 0, hi = cum.length - 1;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if ((cum[mid] as number) < r) lo = mid + 1; else hi = mid; }
+    const modDays = Math.max(1, Math.min(2300, Math.round(300 * Math.exp(ar() * 2))));
+    const base = (through[0] as SimItem).title.replace(/ (Map|Dashboard|Viewer|Story|Explorer) \d+$/, '');
+    const app: SimItem = {
+      id, title: `${base} ${word}${config.tidy ? '' : ` ${i}`}`, owner: (owners[lo] as { username: string }).username, type, typeKeywords: [],
+      created: anchor - (modDays + 60) * DAY, modified: anchor - modDays * DAY, access: 'org', tags: [], snippet: '', description: '', size: 0,
+    };
+    maps.push(app);
+    for (const m of through) appsOf.set(m.id, [...(appsOf.get(m.id) ?? []), app]); // DC-147d: relatedItems forward lists it (Map2App)
+  }
 
   const byId = new Map<string, SimItem>([...services, ...maps, ...extras].map((s) => [s.id, s]));
   // Each owner's content, by folder ('' is the root), in a stable order.
@@ -455,6 +525,8 @@ export function createSimulatedOrg(partial: Partial<SimulatedOrgConfig> = {}): S
         return options.text ? text : JSON.parse(text);
       }
       if (item[3] === 'relatedItems') {
+        // DC-147d: forward from a web map: the apps that name it, plus Map Areas and Survey123 forms (the item panel's extras).
+        if (params.direction === 'forward' && (it.type === 'Web Map' || it.type === 'Web Scene')) return simulatedRelatedForward(it, appsOf.get(it.id) ?? [], anchor);
         const src = sourceOf.get(it.id);
         return { total: src ? 1 : 0, relatedItems: src ? [{ id: src }] : [] };
       }
@@ -495,8 +567,61 @@ export function createSimulatedOrg(partial: Partial<SimulatedOrgConfig> = {}): S
   });
 
   const rush = () => { config.speed = 0; for (const fire of [...pending]) fire(); };
+  setFakeRelated(config.orgId, request); // DC-147d: the item panel asks this org too
 
   return { request, rush, config, world: { services, maps, extras, folders, folderOf, owners, unreadable }, stats };
+}
+
+/** DC-147d: a map as relatedItems needs it. */
+export interface RelatedMap { id: string; title: string; owner: string; type?: string }
+
+const AREA_NAMES = ['North depot', 'Town centre', 'Flood zone', 'East ward', 'Rural roads', 'Harbour', 'West ward', 'Industrial estate'];
+const FORM_WORDS = ['inspection', 'survey', 'condition check', 'site visit'];
+
+/** FNV-1a over the id: the extras' random stream is the map's own, so they never move another map's (or the scan's) numbers. */
+function hashId(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return h >>> 0;
+}
+
+/**
+ * DC-147d: what `relatedItems?direction=forward` answers for a web map: the apps that use it (Map2App), then offline Map Areas
+ * (Map2Area) and Survey123 forms (Data2Survey), from the map id's own random stream. About 1 map in 14 answers 403 (another
+ * owner's map seen by a non-admin), so "not available" can be seen in the demo too.
+ */
+export function simulatedRelatedForward(map: RelatedMap, apps: Pick<SimItem, 'id' | 'title' | 'owner' | 'type' | 'modified'>[] = [], anchor = Date.now()): Json {
+  const r = seeded(hashId(map.id) ^ 0x147d);
+  if (r() < 0.07) return { error: { code: 403, messageCode: 'GWM_0003', message: 'You do not have permissions to access this resource or perform this operation.', details: [] } };
+  const hex = () => Array.from({ length: 32 }, () => Math.floor(r() * 16).toString(16)).join('');
+  const base = map.title.replace(/ (Map|Scene|Viewer|Dashboard|Board|Story|Explorer)( \d+)?$/, '');
+  const rows: Json[] = apps.map((a) => ({ id: a.id, title: a.title, owner: a.owner, type: a.type, modified: a.modified }));
+  const areas = r() < 0.45 ? 1 + Math.floor(r() * r() * 4) : 0;
+  const start = Math.floor(r() * AREA_NAMES.length);
+  for (let k = 0; k < areas; k++) {
+    rows.push({ id: hex(), title: `${base}: ${AREA_NAMES[(start + k) % AREA_NAMES.length]}`, owner: map.owner, type: 'Map Area', typeKeywords: ['Map', 'Map Area', 'Offline'], modified: anchor - Math.round(30 + r() * 900) * DAY });
+  }
+  if (r() < 0.3) {
+    const word = FORM_WORDS[Math.floor(r() * FORM_WORDS.length)] as string;
+    rows.push({ id: hex(), title: `${base} ${word}`, owner: map.owner, type: 'Form', typeKeywords: ['Form', 'Survey123'], modified: anchor - Math.round(30 + r() * 900) * DAY });
+  }
+  return { total: rows.length, start: 1, num: rows.length, nextStart: -1, relatedItems: rows };
+}
+
+/**
+ * DC-147d: a request function that answers only relatedItems forward, for the quick demo (it has no made-up org in memory).
+ * `lookup` gives the map (its title and owner) from the scan on screen; `latencyMs` is how long each answer takes.
+ */
+export function createRelatedFake(lookup: (id: string) => RelatedMap | undefined, latencyMs = 450): RequestFn {
+  return (path, params = {}, options = {}) => new Promise((resolve, reject) => {
+    if (options.signal?.aborted) { reject(abortError()); return; }
+    const m = /^content\/items\/([0-9a-f]{32})\/relatedItems$/.exec(path);
+    const map = m ? lookup(m[1] as string) : undefined;
+    const body = !m || params.direction !== 'forward' ? { error: { code: 400, message: 'Unknown endpoint', details: [] } }
+      : !map ? { error: { code: 400, message: 'Item does not exist or is inaccessible.', details: [] } }
+      : simulatedRelatedForward(map);
+    setTimeout(() => resolve(body), latencyMs);
+  });
 }
 
 /**

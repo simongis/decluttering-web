@@ -11,13 +11,22 @@ import '@esri/calcite-components/dist/components/calcite-label';
 import '@esri/calcite-components/dist/components/calcite-chip';
 import '@esri/calcite-components/dist/components/calcite-icon';
 import './dc-family-row';
-import type { Org, OwnerGroup, Row, Thresholds } from '../../domain/types';
+import './dc-item-panel';
+import './dc-usage-peek';
+import type { ItemOpenDetail } from './dc-family-row';
+import type { DcItemPanel } from './dc-item-panel';
+import type { DcUsagePeek } from './dc-usage-peek';
+import { HATCH_ID } from './dc-usage-bars';
+import { usageContext, type UsageContext } from '../../domain/usage-series';
+import { listTop, rowBars } from '../../domain/usage-bars';
+import type { Data, Org, OwnerGroup, Row, Thresholds } from '../../domain/types';
 import { COOLDOWN_DAYS } from '../../domain/cooldown';
 import { sortRows, type SortKey } from '../../domain/priority';
 import { agoText, credit, firstName, plural, roleLabel } from '../shared/text';
 import { includedRows, itemOn, sayWhy, sumSvc } from './helpers';
 import { loadSession } from '../../auth/session';
 import { OwnerThumbs, ownerContentUrl } from './owner-thumbs';
+import { RelatedIdle } from './related-idle';
 
 const ROWS_COLLAPSED = 4;
 /** DC-100: the first cards are drawn at once; the rest follow a few at a time, so a big org's page never freezes while it builds. */
@@ -46,6 +55,9 @@ export class DcOwnerList extends LitElement {
   @property({ type: Boolean }) stopped = false;
   /** DC-096: username to extra words for the "Nudged" chip, e.g. "2 of 4 gone". */
   @property({ attribute: false }) nudgeNotes: ReadonlyMap<string, string> = new Map();
+  /** DC-147c: the scan (for the rows' bars and the item panel), the admin's sweep setting, the scan was stopped. */
+  @property({ attribute: false }) data: Data | null = null;
+  @property({ type: Boolean }) countSweeps = false;
   @state() private expanded = new Set<string>();
   /** How many owner cards are in the page now. It grows a chunk at a time, while the end of the list is near the screen (DC-100b), until every owner is there. */
   @state() private limit = FIRST_CARDS;
@@ -56,8 +68,11 @@ export class DcOwnerList extends LitElement {
   private thumbs: OwnerThumbs | null = null;
   private picIo: IntersectionObserver | null = null;
   private seen = new WeakSet<Element>();
+  /** DC-147d: relatedItems pre-fetch for the families on screen, when the scan is complete and the page is idle. */
+  private idle = new RelatedIdle(this);
 
   override disconnectedCallback(): void {
+    this.idle.stop();
     this.picIo?.disconnect(); this.picIo = null; this.seen = new WeakSet();
     this.thumbs?.dispose(); this.thumbs = null;
     cancelAnimationFrame(this.raf); this.raf = 0;
@@ -106,6 +121,28 @@ export class DcOwnerList extends LitElement {
 
   protected override createRenderRoot(): HTMLElement { return this; }
 
+  override connectedCallback(): void { super.connectedCallback(); this.addEventListener('dc-item-open', this.onItemOpen as EventListener); this.idle.start(); }
+
+  /** DC-147c: a row asked for the item panel. The hover card closes; the panel opens for the row. */
+  private onItemOpen = (e: CustomEvent<ItemOpenDetail>) => {
+    e.stopPropagation();
+    this.querySelector<DcUsagePeek>('dc-usage-peek')?.hide();
+    this.querySelector<DcItemPanel>('dc-item-panel')?.show(e.detail);
+  };
+
+  /** DC-147c: the usage context and the shared bar top, worked out once per list (memoised on the data, setting and owners). */
+  private scaleMemo: { data: Data; sweeps: boolean; owners: OwnerGroup[]; ctx: UsageContext; top: number } | null = null;
+  private scale(): { ctx: UsageContext; top: number } | null {
+    const data = this.data;
+    if (!data || !this.canSeeUsage) return null;
+    const m = this.scaleMemo;
+    if (m && m.data === data && m.sweeps === this.countSweeps && m.owners === this.owners) return m;
+    const ctx = usageContext(data, this.countSweeps);
+    const top = listTop(this.owners.flatMap((o) => o.rows.map((r) => rowBars(r.family, ctx))));
+    this.scaleMemo = { data, sweeps: this.countSweeps, owners: this.owners, ctx, top };
+    return this.scaleMemo;
+  }
+
   private why(r: Row): string { return sayWhy(r, this.canSeeUsage, this.depsKnown, this.stopped); }
 
   private view(rows: Row[]): Row[] {
@@ -119,8 +156,18 @@ export class DcOwnerList extends LitElement {
   }
 
   private row(r: Row, on: boolean) {
+    const sc = this.scale();
     return html`<dc-family-row .row=${r} .org=${this.org} .why=${this.why(r)} .on=${on} ?selectable=${this.selectable}
-      ?member=${this.member} .done=${this.done.has(r.source.id)} .showUsage=${this.canSeeUsage} .depsKnown=${this.depsKnown} .stopped=${this.stopped}></dc-family-row>`;
+      ?member=${this.member} .done=${this.done.has(r.source.id)} .showUsage=${this.canSeeUsage} .depsKnown=${this.depsKnown} .stopped=${this.stopped}
+      .bars=${sc ? rowBars(r.family, sc.ctx) : null} .top=${sc?.top ?? 0} .scanRef=${sc?.ctx.ref ?? 0}></dc-family-row>`;
+  }
+
+  /** DC-147c: drawn once per list: the hatch the bars share, the hover card and the item panel. */
+  private shared() {
+    return html`<svg class="ub-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs><pattern id=${HATCH_ID} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="4" class="hb"></rect><line x1="0" y1="0" x2="0" y2="4" class="hl"></line></pattern></defs></svg>
+      ${this.canSeeUsage ? html`<dc-usage-peek .root=${this}></dc-usage-peek>` : nothing}
+      <dc-item-panel .data=${this.data} .org=${this.org} .countSweeps=${this.countSweeps} .depsKnown=${this.depsKnown} .stopped=${this.stopped}
+        .member=${this.member} .canSeeUsage=${this.canSeeUsage}></dc-item-panel>`;
   }
 
   /**
@@ -129,7 +176,7 @@ export class DcOwnerList extends LitElement {
    */
   private cardOf(o: OwnerGroup) {
     return guard([o, this.expanded.has(o.owner.username), this.items, this.done, this.sort, this.selectable, this.member, this.canSeeUsage,
-      this.depsKnown, this.stopped, this.org, this.nudgeNotes.get(o.owner.username), this.thumbs?.get(o.owner.username), getLocale()], () => this.card(o));
+      this.depsKnown, this.stopped, this.org, this.nudgeNotes.get(o.owner.username), this.thumbs?.get(o.owner.username), getLocale(), this.scale()?.top, this.scale()?.ctx], () => this.card(o));
   }
 
   private card(o: OwnerGroup) {
@@ -179,10 +226,11 @@ export class DcOwnerList extends LitElement {
   }
 
   override render() {
-    if (this.member) return this.memberList();
+    if (this.member) return html`${this.memberList()}${this.shared()}`;
     const shown = this.filterOwner ? this.owners.filter((o) => o.owner.username === this.filterOwner) : this.owners;
     return html`<div class="owner-list">${repeat(shown.slice(0, this.limit), (o) => o.owner.username, (o) => this.cardOf(o))}</div>
-      ${shown.length > this.limit ? html`<div class="owner-end" aria-hidden="true" style="height:1px"></div>` : nothing}`;
+      ${shown.length > this.limit ? html`<div class="owner-end" aria-hidden="true" style="height:1px"></div>` : nothing}
+      ${this.shared()}`;
   }
 }
 declare global { interface HTMLElementTagNameMap { 'dc-owner-list': DcOwnerList } }

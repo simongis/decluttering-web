@@ -1,4 +1,4 @@
-// Pure helpers for the review components (tone-guide copy, tick state, sparkline geometry). No DOM.
+// Pure helpers for the review components (tone-guide copy, tick state). No DOM.
 import type { Option, OwnerGroup, Row, Thresholds } from '../../domain/types';
 import { describe, lastUsedWords, span, viewsWords } from '../../domain/stale';
 import { fmtInt, fmtMonthYear, formatMB } from '../../domain/format';
@@ -48,20 +48,6 @@ export const sayCredits = (row: Pick<Row, 'credits' | 'attachmentMB'>): string =
   `About ${credit(row.credits)} credits a month` + (row.attachmentMB >= 0.05
     ? `. Includes ${formatMB(row.attachmentMB)} of attachments, billed as file storage at a much lower rate.`
     : '');
-
-export interface SparkBar { x: number; y: number; h: number; zero: boolean }
-export interface SparkGeometry { width: number; height: number; bars: SparkBar[]; total: number }
-
-/** Bar geometry for the 13-week sparkline: a bar per week, a flat tick for an empty week. */
-export function sparkGeometry(weekly: number[]): SparkGeometry {
-  const BW = 3, GAP = 1.6, H = 16;
-  const width = +(weekly.length * (BW + GAP) - GAP).toFixed(1);
-  const bars = weekly.map((v, i): SparkBar => {
-    const h = v > 0 ? Math.max(2, (v / 7) * (H - 3)) : 0;
-    return { x: +(i * (BW + GAP)).toFixed(1), y: v > 0 ? H - h : H - 1, h: v > 0 ? h : 1, zero: v <= 0 };
-  });
-  return { width, height: H, bars, total: weekly.reduce((a, b) => a + b, 0) };
-}
 
 /** Ticked owners (with at least one ticked item) and the ticked item ids. */
 export function selectionOf(owners: OwnerGroup[], items: ReadonlyMap<string, boolean>) {

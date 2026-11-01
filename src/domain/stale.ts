@@ -22,8 +22,16 @@ export const PRESETS: Record<'gentle' | 'balanced' | 'strict', Thresholds> = {
  * Unknown sizes are never hidden (DC-053).
  */
 export const SIZE_FLOOR_MB = 10;
-/** The usage history the scan reads: 365 UTC days up to and including today (src/scan/pipeline.ts). */
-export const USAGE_READ_DAYS = 365;
+/**
+ * DC-147: the usage history the scan reads: 730 UTC days up to and including today (src/scan/pipeline.ts), for the item
+ * panel. A scan saved before DC-147 read 365 (Data.usageDays absent).
+ */
+export const USAGE_READ_DAYS = 730;
+/**
+ * DC-147: the usage the rule looks at: days 0 to 364 (what the scan read before DC-147). The second year is shown in the item
+ * panel only, so no layer is picked out or left off differently for having more history behind it.
+ */
+export const USAGE_RULE_DAYS = 365;
 /** What Esri says a blank lastViewed means (docs/research/usage-signals-deep-dive.md section 2). */
 export const NO_RECORD_SINCE = 'November 2022';
 const opts = (vals: number[], label: (v: number) => string): Option[] => vals.map((value) => ({ value, get label() { return label(value); } }));
@@ -197,6 +205,7 @@ export function useOf(members: readonly Service[], ref: number, sweeps?: Sweeps)
   for (const m of members) {
     for (const [d, c] of m.usage) {
       if (!(c > 0)) continue; // DC-084: a zero count is not a day with data requests
+      if (d >= USAGE_RULE_DAYS) continue; // DC-147: the second year is for the item panel, never the rule
       const a = Math.max(0, d); // a future-dated bucket is use today
       if (plain) { if (newest === null || a < newest) newest = a; continue; }
       if (!perDay) perDay = new Map();
@@ -219,9 +228,9 @@ export function useOf(members: readonly Service[], ref: number, sweeps?: Sweeps)
   return { last, hasViewed, none: hasViewed && last === null && !swept, ...(swept ? { swept } : {}) };
 }
 
-const sweepMemo = new WeakMap<Data, Sweeps>();
+const sweepMemo = new WeakMap<Data, { rule: Sweeps; all: ReadonlySet<number> }>();
 /** DC-100: the last sweep work and what it was worked out from. A new Data that changed only dependencies reuses it. */
-let sweepLast: { services: readonly Service[]; sweeps: Sweeps } | null = null;
+let sweepLast: { services: readonly Service[]; rule: Sweeps; all: ReadonlySet<number> } | null = null;
 const sameSweepInput = (a: readonly Service[], b: readonly Service[]): boolean => {
   if (a === b) return true;
   if (a.length !== b.length) return false;
@@ -231,16 +240,27 @@ const sameSweepInput = (a: readonly Service[], b: readonly Service[]): boolean =
   }
   return true;
 };
-/** DC-086: the org's sweep days and hours, worked out once per Data (and not again while usage and views are unchanged). */
-export function sweepsOf(data: Data): Sweeps {
+function sweepWork(data: Data): { rule: Sweeps; all: ReadonlySet<number> } {
   let sw = sweepMemo.get(data);
   if (!sw) {
-    if (sweepLast && sameSweepInput(sweepLast.services, data.services)) sw = sweepLast.sweeps;
-    else { sw = { days: sweepDays(data.services), hours: sweepHours(families(data)) }; sweepLast = { services: data.services, sweeps: sw }; }
+    if (sweepLast && sameSweepInput(sweepLast.services, data.services)) sw = sweepLast;
+    else {
+      // DC-147: sweep days are found over every day read (a day is judged on its own); the rule's, and the note's dates, stay
+      // within the year the rule reads, which is exactly what a 365-day scan found.
+      const all = sweepDays(data.services);
+      const days = new Set<number>();
+      for (const d of all) if (d < USAGE_RULE_DAYS) days.add(d);
+      sw = { rule: { days, hours: sweepHours(families(data)) }, all };
+      sweepLast = { services: data.services, ...sw };
+    }
     sweepMemo.set(data, sw);
   }
   return sw;
 }
+/** DC-086: the org's sweep days and hours, worked out once per Data (and not again while usage and views are unchanged). */
+export const sweepsOf = (data: Data): Sweeps => sweepWork(data).rule;
+/** DC-147: sweep days over every day read (both years), for the item panel. Same rule, same memo as sweepsOf. */
+export const sweepDaysRead = (data: Data): ReadonlySet<number> => sweepWork(data).all;
 interface UseMemo { usage: readonly (readonly (readonly [number, number])[])[]; viewed: (string | null | undefined)[]; sweeps: Sweeps | undefined; ref: number; use: UseInfo }
 /** DC-100: a family's last use, kept while its members' usage arrays and lastViewed, the sweeps and the scan date are the same (a Data copy that only gained dependencies reuses it). */
 const useMemo = new WeakMap<object, UseMemo>();
@@ -268,7 +288,7 @@ export function useKnownFor(u: UseInfo, minDays: number, usageComplete: boolean)
   if (!usageComplete) return false;
   // A lastViewed set aside as a sweep (DC-086) hides what came before it: only the year of requests is known.
   if ((u.hasViewed && !u.swept) || u.last !== null) return true;
-  return minDays <= USAGE_READ_DAYS;
+  return minDays <= USAGE_RULE_DAYS;
 }
 
 /** Passes the "Last used: more than N ago" rule: known, and nothing newer than N days (0 skips the rule). */
@@ -308,16 +328,28 @@ function lightOf(f: Family, ref: number): Light {
   return { lastModified, daysSinceUpdate, usedBy: deps ? deps.size : 0, sizeMB, attachmentMB, credits: creditsPerMonth(sizeMB, attachmentMB), sizeKnown };
 }
 
-function scoreFamily(f: Family, use: UseInfo, owner: Owner, l: Light, usageComplete: boolean): Base {
+function scoreFamily(f: Family, use: UseInfo, owner: Owner, l: Light, usageComplete: boolean, ref: number, sweeps: Sweeps | undefined): Base {
   const members = [f.source, ...f.views];
   const weekly = new Array<number>(13).fill(0);
-  const seen = new Set<number>();
+  const weeklySwept = new Array<number>(13).fill(0);
+  // DC-101: today (day 0) and the previous 90 UTC days, so a layer used today never shows empty bars.
+  // DC-144: today is a partial day and is kept in (a layer used today shows it), consistently in the bars, the total and the
+  // busiest day; the tooltip says "today so far" when the busiest day is today. Future-dated buckets (d < 0) stay out.
+  // Request counts are summed over the source and its views per day; request days stay a union of days.
+  const perDay = new Map<number, number>();
   for (const m of members) for (const [d, c] of m.usage) {
-    // DC-101: today (day 0) and the previous 90 UTC days, so a layer used today never shows empty bars.
-    if (!(c > 0) || d < 0 || d > 90 || seen.has(d)) continue;
-    seen.add(d);
+    if (!(c > 0) || d < 0 || d > 90) continue;
+    perDay.set(d, (perDay.get(d) ?? 0) + c);
+  }
+  let requests91 = 0, busiest: Row['busiest'] = null;
+  for (const [d, c] of perDay) {
     const w = 12 - Math.floor(d / 7);
     weekly[w] = (weekly[w] ?? 0) + 1;
+    // The same test useOf applies for Last used: a sweep day on which the family made at most SWEEP_HEAVY_REQUESTS.
+    // `sweeps` is undefined when the admin counts sweeps, so nothing is light then.
+    if (sweeps?.days.has(d) && c <= SWEEP_HEAVY_REQUESTS) weeklySwept[w] = (weeklySwept[w] ?? 0) + 1;
+    requests91 += c;
+    if (!busiest || c > busiest.count || (c === busiest.count && d < busiest.daysAgo)) busiest = { daysAgo: d, count: c, date: new Date(ref - d * DAY).toISOString().slice(0, 10) };
   }
   const tidyHints = tidyHintsOf(f.source);
   const viewCounts = members.map((m) => m.numViews).filter((v): v is number => typeof v === 'number');
@@ -327,7 +359,7 @@ function scoreFamily(f: Family, use: UseInfo, owner: Owner, l: Light, usageCompl
     numViews: viewCounts.length ? viewCounts.reduce((a, b) => a + b, 0) : null,
     daysSinceUpdate: l.daysSinceUpdate, lastModified: l.lastModified,
     usedBy: l.usedBy, sizeMB: l.sizeMB, attachmentMB: l.attachmentMB, credits: l.credits, sizeKnown: l.sizeKnown,
-    tidyHints, tidy: tidyTip(tidyHints), weekly,
+    tidyHints, tidy: tidyTip(tidyHints), weekly, weeklySwept, requests91, busiest, usageRead: usageComplete,
     staleness: (clamp01(use.last === null ? 1 : use.last / 365) + clamp01(l.daysSinceUpdate / 730)) / 2,
   };
 }
@@ -394,7 +426,7 @@ class BaseEntry implements Scored {
     this.source = family.source; this.lastUsedDaysAgo = use.last; this.noUseRecorded = use.none && complete;
     this.daysSinceUpdate = l.daysSinceUpdate; this.lastModified = l.lastModified; this.usedBy = l.usedBy; this.sizeMB = l.sizeMB; this.credits = l.credits; this.sizeKnown = l.sizeKnown;
   }
-  get base(): Base { return this.rest ??= scoreFamily(this.family, this.use, this.owner, this.l, this.complete); }
+  get base(): Base { return this.rest ??= scoreFamily(this.family, this.use, this.owner, this.l, this.complete, this.ref, this.sweeps); }
 }
 /** The entries of the last Data scored (per sweeps setting), in family order: the next Data finds its families at the same places, or through `byFamily`. */
 const lastBase: [{ list: BaseEntry[]; byFamily: Map<Family, BaseEntry> | null } | null, { list: BaseEntry[]; byFamily: Map<Family, BaseEntry> | null } | null] = [null, null];
@@ -435,7 +467,8 @@ export function scoredFamilies(data: Data, countSweeps = false): Scored[] {
       const owner = own || { username: f.source.owner, fullName: f.source.owner, disabled: false, lastNotified: null, thumbnail: null };
       const l = lightOf(f, ref);
       let anyUsage = false;
-      for (const m of members) if (m.usage.length > 0 || typeof m.lastViewed === 'string') { anyUsage = true; break; }
+      // DC-147: a bucket in the second year is not usage data for the rule.
+      for (const m of members) if (typeof m.lastViewed === 'string' || m.usage.some(([d]) => d < USAGE_RULE_DAYS)) { anyUsage = true; break; }
       e = new BaseEntry(f, use, anyUsage, l, owner, ref, complete, sweeps, own);
     }
     list[i] = e;

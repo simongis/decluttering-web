@@ -82,11 +82,13 @@ html[data-skin="console"] :is(h1, h2) { color: var(--dc-heading); }
 /* The header: a rounded elbow on the left and a segmented colour rule along the bottom. */
 html[data-skin="console"] calcite-shell > calcite-navigation[slot="header"] {
   --calcite-navigation-background-color: transparent;
-  margin: 0.5rem 0.5rem 0;
-  border-block-start: 0;
+  /* FB-86: the header is exactly the standard look's height and position (3px top border, no margin, no padding), so
+     switching looks never moves the labels. The colour rule is only a background along the bottom edge. */
+  margin: 0 0.5rem 0 0;
+  border-block-start: 3px solid transparent;
   border-inline-start: 3rem solid var(--cx-amber);
   border-start-start-radius: 2rem;
-  padding-block-end: 8px;
+  padding-block-end: 0;
   background:
     linear-gradient(90deg,
       var(--cx-amber) 0 18%, transparent 18% 18.6%,
@@ -100,10 +102,9 @@ html[data-skin="console"] calcite-shell > calcite-navigation[slot="header"] {
 html[data-skin="console"] calcite-shell > main {
   border-inline-start: 0.75rem solid var(--cx-lilac);
   border-end-start-radius: 1.25rem;
-  margin-block-start: 0.5rem;
 }
 @media (max-width: 600px) {
-  html[data-skin="console"] calcite-shell > calcite-navigation[slot="header"] { border-inline-start-width: 1.25rem; border-start-start-radius: 1rem; margin: 0.25rem 0.25rem 0; }
+  html[data-skin="console"] calcite-shell > calcite-navigation[slot="header"] { border-inline-start-width: 1.25rem; border-start-start-radius: 1rem; margin: 0 0.25rem 0 0; }
   html[data-skin="console"] calcite-shell > main { border-inline-start-width: 0.4rem; }
 }
 
@@ -245,3 +246,73 @@ html[data-skin="console"] main calcite-panel.em-edit { --calcite-panel-header-ba
 html[data-skin="console"] main calcite-panel.em-prev { --calcite-panel-header-background-color: var(--cx-peach); }
 html[data-skin="console"] .em-editor .ph { background: var(--cx-periwinkle); color: var(--cx-black); border-color: transparent; }
 html[data-skin="console"] .em-editor p:has(> .ph[data-ph="itemList"]:only-child) .ph { background: transparent; color: var(--cx-peach); border: 2px dashed var(--cx-lilac); border-radius: 999px; }
+
+/* DC-147c: the row's bars, the hover card and the item panel. Request shades are their own steps, dim to bright on black
+   (validated in prototypes/item-panel against #0b0b10), not an automatic flip; the clicked layer and lit paths go amber. */
+html[data-skin="console"] :is(dc-owner-list, dc-item-panel, dc-usage-peek) {
+  --q0: #1c1b26; --q1: #4a52a0; --q2: #737cd6; --q3: #9ea7ff; --q4: #dfe2ff;
+  --ip-sweep: #6d6680; --ip-hatch-bg: #15151d; --ip-hatch-line: #6d6680;
+  --ip-line: #4d455c; --ip-link: #6d6680; --ip-link-on: var(--cx-amber);
+  --ip-me: var(--cx-amber); --ip-me-bg: #1f1f2a;
+  --ip-today: var(--cx-rust);
+}
+html[data-skin="console"] dc-item-panel calcite-panel { box-shadow: -1px 0 0 #3a3346; }
+
+/* DC-149 (FB-91): the item panel, the console way. Everything here is console-only; the standard look is checked
+   unchanged by e2e/item-panel.spec.ts.
+   Close: Calcite paints the header actions on foreground-1 with the panel's black action text, so the close cross was
+   black on #0b0b10. It sits in a black cell after the amber bar, a peach cross (13.6:1 on #000, 10.6:1 on the #1f1f2a
+   hover; amber 7.0:1 on the #2a2a38 press); the inset focus ring stays periwinkle (9.4:1 on #000). */
+html[data-skin="console"] dc-item-panel calcite-panel {
+  --calcite-panel-header-action-background-color: var(--cx-black);
+  --calcite-panel-header-action-background-color-hover: #1f1f2a;
+  --calcite-panel-header-action-background-color-press: #2a2a38;
+  --calcite-panel-header-action-text-color: var(--cx-peach);
+  --calcite-panel-header-action-text-color-press: var(--cx-amber);
+}
+/* Each section is framed by a rounded elbow down its left (in the panel's padding, so nothing moves): Usage lilac,
+   Connections periwinkle. Only a border, no generated text. */
+html[data-skin="console"] dc-item-panel .ip > :is(.ip-usage, .ip-conn) { position: relative; --cx-bar: var(--cx-lilac); }
+html[data-skin="console"] dc-item-panel .ip > .ip-conn { --cx-bar: var(--cx-periwinkle); }
+html[data-skin="console"] dc-item-panel .ip > :is(.ip-usage, .ip-conn)::before {
+  content: ""; position: absolute; pointer-events: none;
+  inset-block: -11px 0; inset-inline-start: -14px; inline-size: 4.5rem;
+  border-block-start: 5px solid var(--cx-bar); border-inline-start: 5px solid var(--cx-bar);
+  border-start-start-radius: 14px;
+}
+@media (max-width: 600px) {
+  html[data-skin="console"] dc-item-panel .ip > :is(.ip-usage, .ip-conn)::before { inset-inline-start: -12px; border-inline-start-width: 4px; }
+}
+/* Small headings, axis labels and the table head: the condensed face in capitals. */
+html[data-skin="console"] dc-item-panel .ip :is(h4, h5, .ip-table thead th) { font-family: var(--dc-font-display); text-transform: uppercase; letter-spacing: 0.05em; }
+html[data-skin="console"] dc-item-panel .ip :is(h4, h5) { font-size: 0.85rem; }
+html[data-skin="console"] dc-item-panel .ip-chart :is(.axis text, .ax) { font-family: var(--dc-font-display); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+/* The readout's date or month reads amber (10.4:1), like a console figure. */
+html[data-skin="console"] dc-item-panel .ip-read b { color: var(--cx-amber); }
+
+/* The calendar: small rounded blocks with the 2 px black gap; the day being read gets an amber ring (9.7:1 on the
+   gaps; the periwinkle focus colour vanished on the periwinkle request shades). Today stays the rust ring and pointer. */
+html[data-skin="console"] dc-item-panel .ip-chart .cal rect[data-d] { rx: 3px; ry: 3px; }
+html[data-skin="console"] dc-item-panel .ip .cal .cur { stroke: var(--cx-amber); }
+/* The empty-day swatch in the legend gets an outline, or it is lost on black (#6d6680, 3.9:1). */
+html[data-skin="console"] dc-item-panel .ip-legend .c0 { stroke: #6d6680; stroke-width: 1; }
+
+/* Monthly bars: rounded top caps on a flat lilac baseline, faint segmented gridlines, and the month being read (or
+   pointed at) lit as an amber block behind its label, with black text (10.4:1). Scale and data are the standard ones. */
+html[data-skin="console"] dc-item-panel .ip .mbars .b-top { clip-path: inset(0 round 999px 999px 0 0); }
+html[data-skin="console"] dc-item-panel .ip .mbars .grid { stroke: #3a3346; stroke-dasharray: 10 4; }
+html[data-skin="console"] dc-item-panel .ip .mbars .base { stroke: var(--cx-lilac); stroke-width: 2; }
+html[data-skin="console"] dc-item-panel .ip .mbars .hit.cur { stroke: none; }
+html[data-skin="console"] dc-item-panel .ip .mbars .mblk { fill: var(--cx-amber); pointer-events: none; }
+html[data-skin="console"] dc-item-panel .ip .mbars .mcol:is(:hover, :has(> .hit.cur)) :is(.mblk, .mblk-t) { display: inline; }
+html[data-skin="console"] dc-item-panel .ip .mbars .mcol:is(:hover, :has(> .hit.cur)) .ax:not(.yr) { fill: var(--cx-black); }
+
+/* Connections: each card gets a rounded left cap in its column's colour (the clicked layer keeps its amber ring);
+   "+N more" is a pill. */
+html[data-skin="console"] dc-item-panel .ip .node { border-inline-start: 5px solid var(--cx-bar, var(--cx-lilac)); border-start-start-radius: 12px; border-end-start-radius: 12px; }
+html[data-skin="console"] dc-item-panel .ip .col[data-col="family"] { --cx-bar: var(--cx-lilac); }
+html[data-skin="console"] dc-item-panel .ip .col[data-col="direct"] { --cx-bar: var(--cx-periwinkle); }
+html[data-skin="console"] dc-item-panel .ip .col[data-col="through"] { --cx-bar: var(--cx-peach); }
+html[data-skin="console"] dc-item-panel .ip .col[data-col="extra"] { --cx-bar: var(--cx-lilac); }
+html[data-skin="console"] dc-item-panel .ip .node.me { border-inline-start-color: var(--ip-me); }
+html[data-skin="console"] dc-item-panel .ip .more { border-radius: 999px; }

@@ -276,7 +276,7 @@ test.describe('keyboard', () => {
 });
 
 /* ---------------------------------------------------------------- names and roles */
-test('names and roles: chips, sparkline, dot chart, icon-only controls', async ({ page }) => {
+test('names and roles: chips, usage bars, dot chart, icon-only controls', async ({ page }) => {
   await toDemoEmails(page);
   const chips = await page.locator('dc-emails .em-chips calcite-button').evaluateAll((els) => els.map((e) => ({ ph: e.getAttribute('data-ph'), text: (e.textContent ?? '').trim(), label: e.getAttribute('label') })));
   note('chips', chips);
@@ -286,10 +286,12 @@ test('names and roles: chips, sparkline, dot chart, icon-only controls', async (
   note('editor', await page.locator('dc-emails .em-editor').evaluate((e) => ({ role: e.getAttribute('role'), label: e.getAttribute('aria-label'), multi: e.getAttribute('aria-multiline') })));
 
   await page.goto('/#/demo'); await reviewReady(page);
-  note('sparkline', {
-    count: await page.locator('dc-sparkline svg').count(),
-    sample: await page.locator('dc-sparkline svg').evaluateAll((els) => els.slice(0, 3).map((e) => ({ role: e.getAttribute('role'), label: e.getAttribute('aria-label'), titleOnWrapper: e.parentElement?.getAttribute('title') ?? null }))),
-  });
+  // DC-147c: the row's monthly bars are a button named by a full sentence (the sparkline and its tooltip are gone).
+  const bars = await page.locator('dc-usage-bars button').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''));
+  note('usage-bars', { count: bars.length, sample: bars.slice(0, 3) });
+  expect(bars.length).toBeGreaterThan(0);
+  for (const b of bars) expect(b).toMatch(/^Requests per month, past year: .+\. Click for details\.$/);
+  expect(await page.locator('dc-sparkline').count()).toBe(0);
   const dot = await page.locator('dc-dot-map canvas').first().evaluate((e) => ({ role: e.getAttribute('role'), label: e.getAttribute('aria-label'), described: e.getAttribute('aria-describedby'), tabindex: e.getAttribute('tabindex') }));
   note('dot-map', dot);
   expect(dot.label, 'the dot chart canvas has a text alternative').toBeTruthy();

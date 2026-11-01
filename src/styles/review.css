@@ -105,12 +105,12 @@ dc-review {
   .list-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; min-height: 2rem; border-bottom: 2px solid var(--dc-brand-100); padding-bottom: 0.35rem; }
   .owner-list { display: grid; gap: 1rem; }
   /* .owner is an elevated card (above); its header band is transparent with a hairline under it (finding 10) */
-  .owner-top { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-bottom: 1px solid var(--calcite-color-border-1); background: transparent; }
+  .owner-top { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; padding: 0.75rem 1rem; border-bottom: 1px solid var(--calcite-color-border-1); background: transparent; }
   .owner.none .owner-top strong { color: var(--calcite-color-text-3); }
-  .owner-id { flex: 1; min-width: 0; }
+  .owner-id { flex: 1 1 9rem; min-width: 0; overflow-wrap: anywhere; }
   .owner-id strong { display: block; font-family: var(--dc-font-display); font-weight: 500; font-size: 1.05rem; }
   .owner-id span { font-size: 0.85rem; color: var(--calcite-color-text-3); }
-  .owner-chips { display: flex; gap: 0.35rem; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
+  .owner-chips { display: flex; flex: 0 1 auto; margin-inline-start: auto; gap: 0.35rem; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
   .owner-flags { display: flex; gap: 0.35rem; flex-wrap: wrap; padding: 0.5rem 1rem 0; }
   /* DC-115 (FB-74): the owner's picture is a link to their content. After a short hover or focus a ring, a small "opens elsewhere"
      badge and a one-line tip fade in (under 150 ms); the delay stops a pass of the pointer from flashing them. Touch: no delay. */
@@ -160,11 +160,6 @@ dc-review {
   calcite-list-item.off .row-title calcite-link { text-decoration: line-through; text-decoration-color: var(--dc-neutral-300); }
   .tidy { display: flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; color: var(--calcite-color-text-3); }
   .tidy calcite-icon { color: var(--dc-neutral-400); flex: none; }
-  .spark { width: 4.6rem; flex: none; display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; margin-inline-end: 0.5rem; }
-  .spark svg { display: block; }
-  .spark small { font-size: 0.65rem; line-height: 1; color: var(--calcite-color-text-3); }
-  .spark .b { fill: var(--dc-boustead-blue); }
-  .spark .z { fill: var(--dc-neutral-300); }
 
   /* member mode */
   .mi-p { margin: 0 0 0.75rem; line-height: 1.5; color: var(--calcite-color-text-2); font-size: 0.9rem; }
@@ -241,9 +236,218 @@ dc-broken-refs {
   .broken calcite-icon[slot="icon"] { color: var(--dc-pine); }
   .muted { color: var(--calcite-color-text-3); }
   .small { font-size: 0.85rem; }
-  calcite-link { white-space: nowrap; }
-  .br-body { padding: 0 0.75rem 0.75rem; display: grid; gap: 0.5rem; }
+  .br-body { padding: 0 0.75rem 0.75rem; display: grid; gap: 0.5rem; min-width: 0; }
   .br-note { margin: 0; max-width: 70ch; }
-  .br-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; font-size: 0.9rem; }
-  .br-list li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.15rem 0.6rem; }
+  /* DC-137: a plain table; it scrolls inside the card on narrow screens, never the page */
+  .br-scroll { overflow-x: auto; max-width: 100%; }
+  .br-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+  .br-caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .br-table th, .br-table td { padding: 0.4rem 0.6rem; text-align: start; vertical-align: middle; border-bottom: 1px solid var(--dc-card-line); }
+  .br-table tbody tr:last-child td { border-bottom: 0; }
+  .br-table .num { text-align: end; }
+  .br-table th { font-weight: 600; font-size: 0.8rem; color: var(--calcite-color-text-2); white-space: nowrap; }
+  .br-table th button {
+    all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 0.25rem; border-radius: 2px;
+    &:hover { color: var(--calcite-color-text-1); }
+    &:focus-visible { outline: 2px solid var(--calcite-color-brand); outline-offset: 2px; }
+  }
+  .br-table th.num button { flex-direction: row-reverse; }
+  .br-table th[aria-sort="ascending"], .br-table th[aria-sort="descending"] { color: var(--calcite-color-text-1); }
+  .br-item { min-width: 14rem; }
+  .br-item > span { display: flex; align-items: center; gap: 0.5rem; }
+  .br-item calcite-icon { flex: none; color: var(--calcite-color-text-3); }
+  .br-date, .br-owner { white-space: nowrap; }
+  /* ArcGIS Online's content-status chips: a pale tint of the status colour, the status colour for text and icon */
+  .st-chip { --calcite-chip-border-color: transparent; white-space: nowrap; }
+  .st-deprecated {
+    --calcite-chip-background-color: color-mix(in srgb, var(--calcite-color-status-danger) 14%, var(--calcite-color-foreground-1));
+    --calcite-chip-text-color: var(--calcite-color-status-danger-press, var(--calcite-color-status-danger));
+    --calcite-chip-icon-color: var(--calcite-color-status-danger);
+  }
+  .st-authoritative {
+    --calcite-chip-background-color: color-mix(in srgb, var(--calcite-color-status-success) 14%, var(--calcite-color-foreground-1));
+    --calcite-chip-text-color: var(--calcite-color-status-success-press, var(--calcite-color-status-success));
+    --calcite-chip-icon-color: var(--calcite-color-status-success);
+  }
 }
+
+/*
+ * DC-147c: the row's monthly bars, their hover card and the item panel (prototypes/item-panel/). One sequential hue for
+ * requests, validated in the prototype (monotone; light end 2.13:1 on white); the console look has its own steps in
+ * skin-console.css. Sweep touches are lighter (bars) or an outline (calendar); not read is a hatch with words.
+ */
+dc-owner-list, dc-item-panel, dc-usage-peek {
+  --q0: #e9eff3; --q1: #9db3d6; --q2: #6a8ec4; --q3: #1b51a3; --q4: #0b2a50;
+  --ip-sweep: #8a9aa7; --ip-hatch-bg: #f5f8fa; --ip-hatch-line: #8a9aa7;
+  --ip-text: var(--calcite-color-text-1); --ip-muted: var(--calcite-color-text-2); --ip-line: var(--calcite-color-border-3);
+  --ip-surface: var(--calcite-color-foreground-1); --ip-link: #8a9aa7; --ip-link-on: var(--dc-boustead-blue);
+  --ip-me: var(--dc-boustead-blue); --ip-me-bg: var(--dc-brand-50);
+  --ip-today: var(--dc-raspberry);
+}
+.ub-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.ub-defs .hb { fill: var(--ip-hatch-bg); }
+.ub-defs .hl { stroke: var(--ip-hatch-line); stroke-width: 1.2; }
+dc-usage-bars { display: inline-block; flex: none; }
+dc-usage-bars .ub {
+  all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 2px; width: 10.5rem; min-height: 3.6rem; align-content: start; padding: 4px 6px; border-radius: 4px;
+  box-shadow: 0 0 0 1px transparent;
+}
+dc-usage-bars .ub svg { display: block; overflow: visible; }
+/* Hover cue at once (under 100 ms): a tint, a ring and the chevron; keyboard focus the same plus the focus ring. */
+dc-usage-bars .ub:hover, dc-usage-bars .ub:focus-visible { background: var(--ip-me-bg); box-shadow: 0 0 0 1px var(--ip-me); }
+dc-usage-bars .ub:focus-visible { outline: 2px solid var(--calcite-color-focus, var(--ip-me)); outline-offset: 2px; }
+.ub-base { fill: var(--ip-line); }
+.ub-r { fill: var(--q3); }
+.ub-s { fill: var(--q1); }
+.ub-cap { fill: var(--ip-text); }
+.ub-last { fill: var(--ip-text); }
+.ub-cap-t { font-size: 0.72rem; line-height: 1.3; color: var(--ip-muted); white-space: nowrap; }
+.ub-h { display: none; color: var(--calcite-color-text-link, var(--ip-me)); font-weight: 500; }
+.ub-h::after { content: ""; display: inline-block; width: 0.38em; height: 0.38em; margin-inline-start: 0.35em; border: solid currentColor; border-width: 1.5px 1.5px 0 0; transform: translateY(-0.08em) rotate(45deg); }
+.ub:hover .ub-t, .ub:focus-visible .ub-t { display: none; }
+.ub:hover .ub-h, .ub:focus-visible .ub-h { display: inline; }
+.ub-details {
+  all: unset; cursor: pointer; font-size: 0.8rem; padding: 2px 8px; border-radius: 4px; color: var(--calcite-color-text-link, var(--ip-me));
+  border: 1px solid var(--ip-line);
+  &:hover { background: var(--ip-me-bg); }
+  &:focus-visible { outline: 2px solid var(--calcite-color-focus, var(--ip-me)); outline-offset: 2px; }
+}
+dc-family-row .row-main { cursor: pointer; }
+@media (prefers-reduced-motion: no-preference) {
+  dc-usage-bars .ub { transition: background-color 80ms, box-shadow 80ms; }
+}
+
+/* The hover card */
+dc-usage-peek { display: contents; }
+.pk-card { position: relative; display: grid; gap: 6px; padding: 10px 12px; width: 264px; font-size: 0.8rem; color: var(--ip-text); }
+.pk-title { margin: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline-end: 3rem; }
+.pk-chart { position: relative; }
+.pk-svg { display: block; overflow: visible; }
+.pk-max { position: absolute; inset-inline-end: 0; top: -1.1rem; font-size: 0.68rem; color: var(--ip-muted); }
+.pk-base { stroke: var(--ip-line); }
+.pk-grid { stroke: var(--ip-line); stroke-dasharray: 2 3; }
+.pk-ax { fill: var(--ip-muted); font-size: 9px; font-family: var(--dc-font-sans); }
+.pk-hit { fill: transparent; }
+.pk-hit.on, .pk-hit:hover { fill: color-mix(in srgb, var(--ip-text) 7%, transparent); }
+.pk-read { margin: 0; min-height: 2.6em; line-height: 1.3; }
+.pk-read b { font-weight: 500; }
+.pk-line { margin: 0; font-size: 0.72rem; color: var(--ip-muted); }
+.pk-more { justify-self: start; }
+.linkish {
+  all: unset; cursor: pointer; color: var(--calcite-color-text-link, var(--ip-me)); text-decoration: underline; text-underline-offset: 2px;
+  &:focus-visible { outline: 2px solid var(--calcite-color-focus, var(--ip-me)); outline-offset: 2px; }
+}
+
+/* The item panel. Calcite's sheet transition is off (duration factor 0); dc-item-panel animates the panel and the scrim. */
+dc-item-panel { display: contents; }
+dc-item-panel .ip-sheet {
+  --calcite-internal-duration-factor: 0;
+  --calcite-sheet-width: min(52rem, 100vw); --calcite-sheet-max-width: 100vw; --calcite-sheet-min-width: min(22.5rem, 100vw);
+  --calcite-sheet-background-color: transparent; --calcite-sheet-shadow: none; --calcite-sheet-scrim-background: transparent;
+}
+dc-item-panel .ip-scrim { position: fixed; inset: 0; z-index: calc(var(--calcite-z-index-overlay, 700) - 1); background: rgb(0 0 0 / 0.32); pointer-events: none; }
+dc-item-panel .ip-scrim[hidden] { display: none; }
+dc-item-panel calcite-panel { height: 100%; box-shadow: -8px 0 24px rgb(0 0 0 / 0.18); }
+.ip { padding: 4px 20px 32px; display: grid; gap: 22px; container: ip / inline-size; min-width: 0; color: var(--ip-text); font-size: 0.875rem; }
+.ip-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.ip section { display: grid; gap: 10px; min-width: 0; }
+.ip h3 { margin: 0; font-family: var(--dc-font-display); font-weight: 400; font-size: 1.15rem; color: var(--dc-heading); }
+.ip h4, .ip h5 { margin: 0; font-weight: 500; font-size: 0.8rem; color: var(--ip-muted); }
+.ip .muted { color: var(--ip-muted); font-weight: 400; }
+.ip-sh { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.ip-head { margin: 0; font-size: 1.05rem; line-height: 1.4; max-width: 72ch; }
+.ip-note { margin: 0; font-size: 0.8rem; color: var(--ip-muted); }
+.ip-switches { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.ip-mem { min-width: 0; max-width: 100%; }
+.ip-mem calcite-select { min-width: 14rem; max-width: 100%; }
+.ip-chart { display: grid; gap: 8px; border-radius: 4px; min-width: 0; }
+.ip-chart:focus-visible { outline: 2px solid var(--calcite-color-focus, var(--ip-me)); outline-offset: 4px; }
+.ip-chart svg { display: block; overflow: visible; max-width: 100%; }
+.ip-chart .axis text, .ip-chart .ax { fill: var(--ip-muted); font-size: 10px; font-family: var(--dc-font-sans); }
+.ip-chart .yr { font-weight: 500; }
+.ip .c0 { fill: var(--q0); } .ip .q1 { fill: var(--q1); } .ip .q2 { fill: var(--q2); } .ip .q3 { fill: var(--q3); } .ip .q4 { fill: var(--q4); }
+.ip .sw { fill: var(--ip-surface); stroke: var(--ip-sweep); stroke-width: 1; }
+.ip .nr { fill: url(#dc-ub-hatch); }
+.ip .last { stroke: var(--ip-text); stroke-width: 1.5; }
+.ip .cur { stroke: var(--calcite-color-focus, var(--ip-me)); stroke-width: 2; }
+.ip .today { fill: none; stroke: var(--ip-today); stroke-width: 1.5; pointer-events: none; }
+.ip .today-pt { fill: var(--ip-today); }
+.ip .nr-lbl { fill: var(--ip-surface); stroke: var(--ip-line); }
+.ip .nr-txt { fill: var(--ip-text); font-size: 11px; font-family: var(--dc-font-sans); }
+.ip .mbars .grid { stroke: var(--ip-line); stroke-dasharray: 2 3; }
+.ip .mbars .base { stroke: var(--ip-muted); }
+.ip .b-real { fill: var(--q3); } .ip .b-sweep { fill: var(--q1); }
+.ip .mbars .hit { fill: transparent; }
+.ip .mbars .hit:hover, .ip .mbars .hit.cur { fill: color-mix(in srgb, var(--ip-text) 6%, transparent); stroke: none; }
+.ip-read { margin: 0; min-height: 1.4em; font-size: 0.82rem; }
+.ip-read b { font-weight: 500; }
+.ip-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: 0.75rem; color: var(--ip-muted); }
+.ip-legend .lg { display: inline-flex; align-items: center; gap: 4px; }
+.ip-legend svg { display: block; flex: none; }
+.ip-legend .lg-scale > span { display: inline-flex; }
+.ip .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.ip-fine { margin: 0; color: var(--ip-muted); font-size: 0.78rem; line-height: 1.45; max-width: 80ch; }
+.ip-table { border-collapse: collapse; font-size: 0.8rem; width: 100%; max-width: 28rem; font-variant-numeric: tabular-nums; }
+.ip-table th, .ip-table td { text-align: start; padding: 4px 8px; border-bottom: 1px solid var(--ip-line); }
+.ip-table td { text-align: end; }
+.ip-table thead th { color: var(--ip-muted); font-weight: 500; }
+.ip-table thead th:not(:first-child) { text-align: end; }
+.ip-empty { display: flex; gap: 12px; align-items: flex-start; margin: 0; padding: 14px 16px; border: 1px solid var(--ip-line); border-radius: 4px; background: var(--calcite-color-foreground-2); }
+.ip-empty calcite-icon { color: var(--ip-muted); flex: none; margin-top: 2px; }
+.ip-empty p { margin: 0; }
+.ip-empty .ip-empty-h { font-weight: 500; margin-bottom: 4px; }
+
+/* Connections: three columns, thin connectors between neighbours only; a grouped list on narrow panels or on request. */
+.ip .diagram { position: relative; display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 13rem)); column-gap: 32px; align-items: start; }
+.ip .links { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.ip .links .ln { fill: none; stroke: var(--ip-link); stroke-width: 1.2; }
+.ip .links .ln.on { stroke: var(--ip-link-on); stroke-width: 1.8; }
+.ip .col { position: relative; z-index: 1; display: grid; gap: 8px; align-content: start; }
+.ip .col ul, .ip .clist ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ip .node {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 6px; row-gap: 2px; padding: 7px 8px; border: 1px solid var(--ip-line); border-radius: 4px;
+  background: var(--ip-surface); color: var(--ip-text); text-decoration: none; font-size: 0.8rem; line-height: 1.3;
+}
+.ip .node calcite-icon { grid-row: 1; margin-top: 1px; color: var(--ip-muted); }
+.ip .node > span { grid-column: 2; min-width: 0; }
+.ip .node .nt { font-weight: 500; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.ip .node .no, .ip .node .nvia { color: var(--ip-muted); font-size: 0.74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ip .nme { font-size: 0.72rem; font-weight: 500; color: var(--ip-me); }
+.ip .node:hover .nt { text-decoration: underline; }
+.ip .node:focus-visible { outline: 2px solid var(--calcite-color-focus, var(--ip-me)); outline-offset: 2px; }
+.ip .node.me { border-color: var(--ip-me); box-shadow: inset 0 0 0 1px var(--ip-me); background: var(--ip-me-bg); }
+.ip .more {
+  all: unset; cursor: pointer; font-size: 0.78rem; padding: 6px 8px; border: 1px dashed var(--ip-line); border-radius: 4px; text-align: center;
+  color: var(--calcite-color-text-link, var(--ip-me)); background: var(--ip-surface);
+  &:focus-visible { outline: 2px solid var(--calcite-color-focus, var(--ip-me)); outline-offset: 2px; }
+}
+.ip .clist { display: none; }
+.ip .as-list .clist { display: block; }
+.ip .as-list .diagram { display: none; }
+.ip .clist h4 { margin: 12px 0 4px; font-size: 0.9rem; color: var(--ip-text); }
+.ip .clist h5 { margin: 8px 0 2px; }
+.ip .clist ul { gap: 0; }
+.ip .li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--ip-line); }
+.ip .li calcite-icon { color: var(--ip-muted); }
+.ip .lt { display: grid; gap: 2px; min-width: 0; }
+.ip .lt a { color: var(--calcite-color-text-link, var(--ip-me)); overflow-wrap: anywhere; }
+.ip .ls { font-size: 0.76rem; color: var(--ip-muted); overflow-wrap: anywhere; }
+/* DC-147d: the fourth column, Offline and surveys (relatedItems). Reserved from the first paint; its answers land inside it. */
+.ip .diagram[style*="--cols:4"] { column-gap: 24px; }
+.ip .col-x .xh { margin: 2px 0 -2px; font-size: 0.74rem; }
+.ip .x-note { display: flex; gap: 6px; align-items: baseline; }
+.ip .x-notes { display: grid; gap: 4px; margin-top: 8px; }
+.ip .x-spin {
+  flex: none; width: 0.7em; height: 0.7em; border-radius: 50%; border: 1.5px solid var(--ip-line); border-top-color: var(--ip-muted);
+  align-self: center; animation: x-spin 0.9s linear infinite;
+}
+@keyframes x-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .ip .x-spin { animation: none; border-top-color: var(--ip-line); } }
+@container ip (max-width: 559px) {
+  .ip .diagram, .ip .list-toggle { display: none; }
+  .ip .clist { display: block; }
+  .ip .li { grid-template-columns: auto minmax(0, 1fr); }
+  .ip .lc { grid-column: 2; }
+  .ip .lc:empty { display: none; }
+}
+@media (max-width: 600px) { .ip { padding-inline: 16px; } }

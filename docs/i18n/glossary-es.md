@@ -40,6 +40,8 @@ Use these terms in `src/i18n/es/`. If you change one, update this file in the sa
 | Approved apps | Aplicaciones aprobadas | yes |
 | add | agregar | yes |
 | Deprecated (content status) | obsoleto | yes |
+| Offline map areas (Map Area items) | áreas de mapa sin conexión | yes (per the DC-147d worker, from Esri's Spanish help; controller did not re-check) |
+| Surveys (Survey123 forms) | encuestas | UNVERIFIED |
 | Authoritative (content status) | fidedigno | not yet: check in the live Spanish UI |
 | summary (item field) | resumen | |
 | tags | etiquetas | |
@@ -55,6 +57,7 @@ Use these terms in `src/i18n/es/`. If you change one, update this file in the sa
 | last updated | última actualización | |
 | used by | usado por | |
 | views | visualizaciones | |
+| requests (usage charts only) | solicitudes | Esri's Usage tab label; check against the Spanish UI |
 | nudge (noun, verb) | aviso, avisar | |
 | digest | correo resumen | Not plain *resumen*, which is the item's Summary field |
 | nudge log | registro de avisos | |

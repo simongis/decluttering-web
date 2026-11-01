@@ -6,13 +6,19 @@ export interface Owner {
   disabled: boolean; thumbnail: string | null; lastNotified: string | null;
 }
 
-export interface Dependency { id: string; title: string; type: string; owner: string }
+/**
+ * A map or app that links a layer. DC-147c: `modified` (ISO) and `contentStatus` come from its search row (no extra
+ * request), for the item panel's lists and chips; scans saved before DC-147c lack them (shown without the date).
+ */
+export interface Dependency { id: string; title: string; type: string; owner: string; modified?: string; contentStatus?: string }
 
 /**
  * DC-035a: a map or app that points at a hosted layer no longer in the org. `missing` holds the referenced item ids
  * (32-hex), or `name:<service name>` when the reference had a service url but no item id. Ids only, so the cache stays small.
+ * DC-137: `modified` (ISO) and `contentStatus` come from the map's or app's search row (no extra request); scans saved before
+ * DC-137 lack them until the map is listed again.
  */
-export interface BrokenRef { id: string; title: string; type: string; owner: string; missing: string[] }
+export interface BrokenRef { id: string; title: string; type: string; owner: string; missing: string[]; modified?: string; contentStatus?: string }
 
 export interface Service {
   id: string; title: string; owner: string; created: string; modified: string;
@@ -51,7 +57,26 @@ export interface Data {
   usageComplete?: boolean;
   /** DC-035a: maps and apps with references to layers that are gone (see domain/broken-refs.ts). Absent: not looked for. */
   brokenRefs?: BrokenRef[];
+  /**
+   * DC-147: how many UTC days of usage history the scan read, up to and including the scan day (usage days 0 to
+   * usageDays - 1). Absent: 365, a scan saved before DC-147. The rule only ever looks at the first 365 (USAGE_RULE_DAYS).
+   */
+  usageDays?: number;
+  /**
+   * DC-147: usage windows that failed, as inclusive [newest, oldest] days-ago ranges. Days in them without requests are
+   * "not read", never zero. Absent: none recorded (a scan before DC-147 with usageComplete false gives no ranges).
+   */
+  usageGaps?: [number, number][];
+  /** DC-147: apps that show a layer through a web map or scene (see MapApps). Absent: not looked for (a scan before DC-147). */
+  mapApps?: MapApps;
 }
+
+/**
+ * DC-147: apps whose /data references a web map (or web scene) in the org by id, for the item panel's "Through a map"
+ * column. `byMap`: map id to app ids (every such reference, so an app not read again stays right when its map gains a
+ * layer); `apps`: each of those apps once.
+ */
+export interface MapApps { byMap: Record<string, string[]>; apps: Dependency[] }
 
 export interface Family { id: string; source: Service; views: Service[] }
 
@@ -92,6 +117,14 @@ export interface Row {
   sizeKnown: boolean;
   tidyHints: TidyHint[]; tidy: string | null;
   weekly: number[];
+  /** DC-144: of each week's request days, how many had only sweep touches (set aside by Last used; none when the admin counts sweeps). Same length as weekly. */
+  weeklySwept: number[];
+  /** DC-144: data requests over the 91 days (day 0 plus the previous 90 UTC days), summed over the source and its views. */
+  requests91: number;
+  /** DC-144: the busiest of those days, summed over the family; null with no requests. `date` is its UTC date (YYYY-MM-DD). */
+  busiest: { daysAgo: number; count: number; date: string } | null;
+  /** DC-144: false when a usage window failed (data.usageComplete === false): the sparkline says "not read" and never draws zero. */
+  usageRead: boolean;
   stale: boolean; staleness: number;
   priority: Priority; priorityReason: string;
 }

@@ -127,6 +127,21 @@ describe('scanDependencies', () => {
     expect(batches[0]!.done).toBe(117); // the reused links show up straight away
   });
 
+  it('DC-147c: a reused map takes its date and status from the current search row, even from a scan saved without them', async () => {
+    const f = fake();
+    const core = await scanCore(f.request, opts);
+    const full = await scanDependencies(core);
+    // A scan saved before DC-147c: no dates or statuses on its links.
+    const bare = new Map([...full.dependencies].map(([k, v]) => [k, v.map(({ id, title, type, owner }) => ({ id, title, type, owner }))]));
+    const previous = { fetchedAt: new Date(NOW - 3.5 * DAY).toISOString(), data: withDependencies(core.data, bare) };
+    const core2 = await scanCore(f.request, opts);
+    const r = await scanDependencies(core2, { previous });
+    expect(r.reused).toBe(117);
+    const deps = r.dependencies.get(PARKS) ?? [];
+    expect(deps.length).toBe(60);
+    expect(deps.every((d) => typeof d.modified === 'string')).toBe(true);
+  });
+
   it('depsMode none reads nothing', async () => {
     const f = fake();
     const core = await scanCore(f.request, { ...opts, depsMode: 'none' });

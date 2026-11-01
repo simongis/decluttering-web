@@ -425,7 +425,8 @@ export class DcReview extends LitElement {
       @dc-thresholds-change=${(e: CustomEvent<Thresholds>) => { e.stopPropagation(); this.setThresholds(e.detail); }}></dc-filters>`;
     const list = !everyone.length ? this.emptyState() : html`<dc-owner-list .owners=${owners} .org=${this.org} .thresholds=${this.thresholds}
       .items=${this.items} .done=${this.done} .filterOwner=${this.filterOwner} .sort=${this.activeSort} ?selectable=${this.selectable} ?member=${personal}
-      .canSeeUsage=${this.canSeeUsage} .depsKnown=${this.depsKnown} .stopped=${this.stopped} .nudgeNotes=${this.nudgeNotes()}></dc-owner-list>`;
+      .canSeeUsage=${this.canSeeUsage} .depsKnown=${this.depsKnown} .stopped=${this.stopped} .nudgeNotes=${this.nudgeNotes()}
+      .data=${this.data} .countSweeps=${this.countSweeps}></dc-owner-list>`;
     const startNone = this.startOnly && !owners.length && everyone.length > 0;
 
     const notes = [this.depsNote(), this.sizesNote(owners), this.useNote(), this.sweepNote()].filter((n) => n !== nothing);

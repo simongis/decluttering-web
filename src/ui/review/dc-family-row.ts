@@ -11,8 +11,9 @@ import '@esri/calcite-components/dist/components/calcite-chip';
 import '@esri/calcite-components/dist/components/calcite-icon';
 import '@esri/calcite-components/dist/components/calcite-link';
 import '@esri/calcite-components/dist/components/calcite-tooltip';
-import './dc-sparkline';
+import './dc-usage-bars';
 import type { Org, Row, Service } from '../../domain/types';
+import type { RowBars } from '../../domain/usage-bars';
 import { itemUrl } from '../../domain/format';
 import { sayCredits, saySize } from './helpers';
 import { credit } from '../shared/text';
@@ -20,7 +21,13 @@ import { PRIORITY_DOTS, PRIORITY_LABELS } from '../../domain/priority';
 
 /** Everything a row draws from its Row, as one string: a new Row object with the same sign draws the same (DC-100). */
 const signOf = (r: Row): string =>
-  [r.source.id, r.source.title, r.tidy ?? '', r.usedBy, r.sizeKnown, r.sizeMB, r.attachmentMB, r.credits, r.priority, r.priorityReason, r.weekly?.join(','), r.views.map((v) => `${v.id}\u0001${v.title}`).join('\u0002')].join('\u0000');
+  [r.source.id, r.source.title, r.tidy ?? '', r.usedBy, r.sizeKnown, r.sizeMB, r.attachmentMB, r.credits, r.priority, r.priorityReason, r.views.map((v) => `${v.id}\u0001${v.title}`).join('\u0002')].join('\u0000');
+
+/** Clicks on these do their own thing; a click anywhere else on the row opens the item panel (DC-147c). */
+const OWN_CLICK = 'a, button, input, label, calcite-link, calcite-checkbox, calcite-label, calcite-chip, calcite-tooltip, .prio';
+
+/** DC-147c: what `dc-item-open` carries: the row, the member clicked (source or a view) and the button that gets focus back. */
+export interface ItemOpenDetail { row: Row; member: string; opener: HTMLElement | null }
 
 /**
  * One source layer plus its hosted views (a "family"). Renders a single-item list so Calcite's list-item stays a
@@ -43,6 +50,10 @@ export class DcFamilyRow extends LitElement {
   /** False while maps and apps are still being read: no used-by count, no "Tidy with care". */
   @property({ type: Boolean }) depsKnown = true;
   @property({ type: Boolean, attribute: 'show-usage' }) showUsage = true;
+  /** DC-147c: the family's 12 monthly bars and the list's shared top; the scan time for dates. */
+  @property({ attribute: false }) bars: RowBars | null = null;
+  @property({ type: Number }) top = 0;
+  @property({ type: Number }) scanRef = 0;
   /** The scan was stopped early: an unmeasured size says "not measured" rather than "not measured yet". */
   @property({ type: Boolean }) stopped = false;
 
@@ -57,6 +68,16 @@ export class DcFamilyRow extends LitElement {
   private link(s: Service) {
     return html`<calcite-link href=${itemUrl(this.org, s)} target="_blank" rel="noopener" icon-end="launch" label=${t('review.family.openItem', { title: s.title })}>${s.title}</calcite-link>`;
   }
+
+  /** DC-147c: a click on the row (not on its links, ticks or chips) opens the item panel for the member clicked. */
+  private onRowClick = (e: MouseEvent, member: string) => {
+    const el = e.target as Element;
+    const own = el.closest('[data-open-panel]');
+    if (!own && el.closest(OWN_CLICK)) return;
+    if (!own && (window.getSelection()?.toString() ?? '') !== '') return; // selecting text, not opening
+    const opener = this.querySelector<HTMLElement>('[data-open-panel]');
+    this.dispatchEvent(new CustomEvent<ItemOpenDetail>('dc-item-open', { detail: { row: this.row, member, opener }, bubbles: true, composed: true }));
+  };
 
   private emit(name: string, id: string, checked: boolean) {
     this.dispatchEvent(new CustomEvent(name, { detail: { id, checked }, bubbles: true, composed: true }));
@@ -85,7 +106,7 @@ export class DcFamilyRow extends LitElement {
                 @calciteCheckboxChange=${(e: Event) => this.emit('dc-item-toggle', s.id, (e.target as HTMLInputElement).checked)}></calcite-checkbox>` : nothing}
           <calcite-icon preload class="svc" icon="feature-layer" scale="s"></calcite-icon>
         </span>
-        <div slot="content" class="row-main">
+        <div slot="content" class="row-main" @click=${(e: MouseEvent) => this.onRowClick(e, s.id)}>
         <div class="row-title">
           ${this.link(s)}
           <span class="why">${this.why}</span>
@@ -94,7 +115,9 @@ export class DcFamilyRow extends LitElement {
               @calciteCheckboxChange=${(e: Event) => this.emit('dc-done-toggle', s.id, (e.target as HTMLInputElement).checked)}></calcite-checkbox>${t('review.family.markDone')}</calcite-label>` : nothing}
         </div>
         <div class="row-end">
-          ${this.showUsage ? html`<dc-sparkline .weekly=${r.weekly}></dc-sparkline>` : nothing}
+          ${this.showUsage && this.bars
+            ? html`<dc-usage-bars .bars=${this.bars} .top=${this.top} .scanRef=${this.scanRef} ?family=${r.views.length > 0}></dc-usage-bars>`
+            : html`<button type="button" class="ub-details" data-open-panel aria-haspopup="dialog" aria-label=${t('review.bars.detailsLabel', { title: s.title })}>${t('review.bars.details')}</button>`}
           ${this.depsKnown && r.usedBy > 0 ? html`<calcite-chip class="c-risk" scale="s" appearance="solid" kind="neutral" icon="link" label=${t('review.family.tidyCare')}>${t('review.family.tidyCare')}</calcite-chip>` : nothing}
           <calcite-chip class="c-plain" scale="s" appearance="outline-fill" kind="neutral" data-size=${r.sizeKnown ? 'known' : 'unknown'} label=${saySize(r, this.stopped)}>${saySize(r, this.stopped)}</calcite-chip>
           ${r.sizeKnown ? html`<calcite-chip class="c-reclaim" scale="s" appearance="outline-fill" kind="neutral" label=${sayCredits(r)} title=${sayCredits(r)}><i class="sw reclaim"></i>≈ ${credit(r.credits)} ${t('review.fig.creditsMonth')}</calcite-chip>` : nothing}
@@ -103,7 +126,7 @@ export class DcFamilyRow extends LitElement {
         </div>
         ${r.views.map((v) => html`<calcite-list-item value=${v.id}>
           <calcite-icon preload slot="content-start" class="svc" icon="feature-layer" scale="s"></calcite-icon>
-          <div slot="content" class="row-title">${this.link(v)}<span class="share">${t('review.family.sharedStorage')}</span></div>
+          <div slot="content" class="row-title" @click=${(e: MouseEvent) => this.onRowClick(e, v.id)}>${this.link(v)}<span class="share">${t('review.family.sharedStorage')}</span></div>
         </calcite-list-item>`)}
       </calcite-list-item>
     </calcite-list>`;

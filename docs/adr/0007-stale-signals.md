@@ -56,3 +56,12 @@ A service is stale when **all** of these visible, editable conditions hold:
 - **Total views (`numViews`) is context, not a filter:** it is all-time and data requests do not raise it. It shows on rows and in the email, and can sort.
 - **Known caveats:** opening a layer's item page (including our "Open in ArcGIS Online" link and the nudge email's links) marks it as used; scripts that touch every layer reset it for all. Whether our own scan's `content/items/{id}` and `relatedItems` calls move `lastViewed` is live check L1: an anonymous dev-org test started 2026-10-16 12:28 UTC, the signed-in check is still to do. If they do, sizing moves to owner listings only.
 - **Replaces:** the days-used count and its window (`maxDaysUsed`, `windowDays`), the FB-11 sweep discussion, and the 2/1 year/6 month ages.
+
+## Amendment, 2026-10-31 (DC-143; user decisions for DC-144 to DC-146)
+
+Research: `docs/research/usage-representation.md`. Daily request counts from `portals/self/usage` are the figure Esri's item Usage tab shows for hosted feature layers, labelled "Requests" (https://doc.arcgis.com/en/arcgis-online/manage-data/monitor-item-usage.htm). They count data requests from any client (maps draw with many, scripts and crawlers count too), not people or uses.
+
+- **Vocabulary:** "requests" is allowed on the usage charts only (the sparkline's tooltip and the click-through chart), because it is Esri's own label. The rule and everything else keep "last used". Dates on the charts are UTC.
+- **Relative measure (DC-146):** request days in the last 12 months, with sweep touches set aside, shown as a percentile against all scanned layers, plus a "Fewest request days" sort. Request totals are never ranked, because they mostly reflect how clients fetch data. It is information only: it is never part of the rule and never appears in owner emails.
+- **Sweep touches on the sparkline:** drawn lighter, with the tooltip saying so, so the bars agree with Last used without hiding what happened.
+- **A usage window that failed is drawn as "not read"**, never as zero.

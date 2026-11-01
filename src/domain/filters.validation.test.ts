@@ -4,7 +4,7 @@
 // Findings and limitations: docs/research/filter-validation.md.
 import { describe, expect, it } from 'vitest';
 import {
-  LAST_USED_OPTIONS, PRESETS, SIZE_OPTIONS, UPDATE_OPTIONS, USED_BY_OPTIONS,
+  LAST_USED_OPTIONS, PRESETS, SIZE_OPTIONS, UPDATE_OPTIONS, USAGE_RULE_DAYS, USED_BY_OPTIONS,
   allRows, describe as describeRule, evaluate, families, matchPreset, ruleLine, sizeChangeImpact, whyLine,
 } from './stale';
 import { CAP_SIZES, LADDER, suggest, suggestSentence } from './suggest';
@@ -58,10 +58,17 @@ const rowOf = (data: Data, id: string, t: Thresholds = OPEN) => {
 // ---------- Last used ("Last used: more than N ago") ----------
 describe('Last used: "more than N ago" is N whole days or more, from the newer of lastViewed and data requests', () => {
   for (const { value: v, label } of LAST_USED_OPTIONS) {
-    it(`${label} (${v} days): a data request ${v} days ago is flagged, ${v - 1} days ago is not`, () => {
+    if (v <= USAGE_RULE_DAYS) it(`${label} (${v} days): a data request ${v} days ago is flagged, ${v - 1} days ago is not`, () => {
       const t = { ...OPEN, minDaysSinceUse: v };
       expect(flagged(svc({ usage: usedOn(v) }), t)).toBe(true);
       expect(flagged(svc({ usage: usedOn(v - 1) }), t)).toBe(false);
+    });
+    // DC-147: the scan reads two years, but the rule reads data requests for one (days 0 to 364), as before; beyond that
+    // only lastViewed tells. So no layer is picked differently for having a second year of history behind it.
+    else it(`${label} (${v} days): data requests in the second year are not the rule's; lastViewed decides`, () => {
+      const t = { ...OPEN, minDaysSinceUse: v };
+      expect(flagged(svc({ usage: usedOn(v - 1), lastViewed: isoAgo(v) }), t)).toBe(true);
+      expect(flagged(svc({ usage: usedOn(USAGE_RULE_DAYS - 1), lastViewed: isoAgo(v) }), t)).toBe(false);
     });
 
     it(`${label} (${v} days): lastViewed ${v} days ago is flagged, ${v - 1} days ago or an hour short is not`, () => {

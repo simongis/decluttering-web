@@ -17,7 +17,12 @@ describe('the scan keeps references to layers that are gone', () => {
     expect(depsKnown).toBe(true);
     const shown = visibleBrokenRefs(data, { depsComplete: true, mode: 'admin' });
     expect(shown.map((b) => b.title).sort()).toEqual(['Community Facilities Explorer', 'Flood Watch Viewer', 'Road Works Dashboard']);
-    expect(shown.every((b) => b.missing.length === 1 && /^[0-9a-f]{32}$/.test(b.missing[0] as string))).toBe(true);
+    expect(shown.every((b) => b.missing.every((k) => /^[0-9a-f]{32}$/.test(k)))).toBe(true);
+    // DC-137: varied counts, each map's modified date and content status from its search row.
+    expect(Object.fromEntries(shown.map((b) => [b.title, b.missing.length]))).toEqual({ 'Flood Watch Viewer': 1, 'Road Works Dashboard': 3, 'Community Facilities Explorer': 2 });
+    expect(shown.every((b) => typeof b.modified === 'string' && !Number.isNaN(Date.parse(b.modified)))).toBe(true);
+    expect(shown.filter((b) => b.contentStatus === 'deprecated').map((b) => b.title)).toEqual(['Road Works Dashboard']);
+    expect(shown.filter((b) => b.contentStatus === 'org_authoritative').map((b) => b.title)).toEqual(['Community Facilities Explorer']);
     expect(data.brokenRefs?.some((b) => b.title === 'Regional Overview Map')).toBe(false);
   });
 
