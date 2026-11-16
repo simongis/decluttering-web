@@ -92,3 +92,92 @@ test('demo: every row has a visible Delete button that opens the dialog for that
   await page.locator('dc-delete-dialog [data-action="delete-cancel"]').click();
   await expect(dialog(page)).not.toHaveAttribute('open', '');
 });
+
+/** A drawn dot on the Review chart, in page coordinates. */
+const chartDot = async (page: Page) => {
+  const canvas = page.locator('dc-review dc-dot-map canvas');
+  await canvas.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(1200); // the dots finish fading in
+  const box = (await canvas.boundingBox())!;
+  const pt = await page.locator('dc-review dc-dot-map').evaluate((m) => {
+    const s = (m as unknown as { sprites: { x: number; y: number; rad: number; id: string }[] }).sprites.find((d) => d.rad > 2);
+    return s ? { x: s.x, y: s.y, id: s.id } : null;
+  });
+  expect(pt, 'the demo chart has a dot').not.toBeNull();
+  return { box, x: box.x + pt!.x, y: box.y + pt!.y, id: pt!.id };
+};
+
+test('demo: a rectangle on the chart adds the layers in it to the delete selection, shown under the chart and in the bar', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/#/demo');
+  await reviewReady(page);
+  await expect(page.locator('[data-scan="select-hint"]')).toBeVisible();
+  const { box } = await chartDot(page);
+  await expect(page.locator('[data-chart-sel-count]')).toContainText('No layers selected');
+  await expect(page.locator('[data-action="chart-sel-delete"]')).toHaveAttribute('disabled', '');
+  await page.mouse.move(box.x + 72, box.y + 14);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.move(box.x + box.width - 16, box.y + box.height - 42, { steps: 8 });
+  await page.mouse.up();
+  const count = page.locator('[data-chart-sel-count]');
+  await expect(count).toBeVisible();
+  const n = Number((await count.innerText()).match(/\d+/)![0]);
+  expect(n).toBeGreaterThan(1);
+  await expect(page.locator('[data-del-count]')).toContainText(`${n} layers selected`);
+  // A second rectangle adds (never fewer).
+  await page.mouse.move(box.x + 72, box.y + 14);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 140, box.y + 80, { steps: 6 });
+  await page.mouse.up();
+  expect(Number((await count.innerText()).match(/\d+/)![0])).toBeGreaterThanOrEqual(n);
+  // The selection deletes from under the chart.
+  await page.locator('[data-action="chart-sel-delete"]').click();
+  await expect(dialog(page)).toHaveAttribute('open', '');
+  expect(await page.locator('dc-delete-dialog [data-delete-item]').count()).toBeGreaterThanOrEqual(n);
+  await page.locator('dc-delete-dialog [data-action="delete-cancel"]').click();
+  await page.locator('[data-action="chart-sel-clear"]').click();
+  await expect(page.locator('[data-chart-sel-count]')).toContainText('No layers selected');
+});
+
+test('demo: a click on a dot asks whether to view or delete it; View opens the item, Delete opens the dialog for it', async ({ page, context }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/#/demo');
+  await reviewReady(page);
+  const dot = await chartDot(page);
+  await page.mouse.click(dot.x, dot.y);
+  const tip = page.locator('dc-review .dm-tip');
+  await expect(tip).toBeVisible();
+  await expect(tip).toHaveAttribute('role', 'dialog');
+  await expect(tip.locator('[data-dot-action="view"]')).toBeVisible();
+  await expect(tip.locator('[data-dot-action="delete"]')).toBeVisible();
+  // Nothing opened by the click itself.
+  expect(context.pages()).toHaveLength(1);
+  const [tab] = await Promise.all([context.waitForEvent('page'), tip.locator('[data-dot-action="view"]').click()]);
+  expect(tab.url()).toContain(dot.id);
+  await tab.close();
+  await expect(tip).toBeHidden();
+  await page.mouse.click(dot.x, dot.y);
+  await tip.locator('[data-dot-action="delete"]').click();
+  await expect(dialog(page)).toHaveAttribute('open', '');
+  await expect(page.locator('dc-delete-dialog [data-delete-item]')).toHaveCount(1);
+  await expect(page.locator(`dc-delete-dialog [data-delete-item="${dot.id}"]`)).toHaveCount(1);
+  const results = await new AxeBuilder({ page }).include('dc-review dc-dot-map').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
+  expect(results.violations.map((v) => v.id)).toEqual([]);
+  await page.locator('dc-delete-dialog [data-action="delete-cancel"]').click();
+});
+
+test('demo: Enter on a focused dot opens the same menu, and Escape closes it back to the chart', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/#/demo');
+  await reviewReady(page);
+  await chartDot(page);
+  await page.locator('dc-review dc-dot-map canvas').focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Enter');
+  const tip = page.locator('dc-review .dm-tip');
+  await expect(tip.locator('[data-dot-action="view"]')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(tip).toBeHidden();
+  await expect(page.locator('dc-review dc-dot-map canvas')).toBeFocused();
+});

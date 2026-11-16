@@ -466,3 +466,6 @@ dc-item-panel calcite-panel { height: 100%; box-shadow: -8px 0 24px rgb(0 0 0 / 
 .row-pick { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; font-size: 0.8125rem; }
 .row-pick > span { cursor: pointer; }
 .del-bar .del-title { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 600; color: var(--calcite-color-status-danger); --calcite-icon-color: var(--calcite-color-status-danger); }
+.del-bar .del-off { color: var(--calcite-color-status-warning-text, #8a5a00); }
+.chart-sel { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin-top: 0.5rem; padding: 0.4rem 0.6rem; border: 1px solid #d83020; border-radius: 4px; background: var(--calcite-color-foreground-1); }
+.chart-sel b { flex: 1 1 12rem; font-size: 0.875rem; }

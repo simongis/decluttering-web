@@ -123,3 +123,11 @@ calcite-segmented-control[disabled] + .dm-lens-note { font-style: italic; }
 .scan-progress .scan-actions .stop, .scan-progress .scan-actions calcite-button { margin: 0; }
 .scan-progress .scan-actions { align-items: stretch; }
 @media (max-width: 600px) { .scan-progress .scan-actions { max-width: none; } .scan-progress .scan-actions calcite-button { flex: 1 1 auto; } }
+
+/* ADR 0016: the dot's menu (Review) and the hint for selecting on the chart. */
+.dm-t-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.4rem; }
+.dm-tip .dm-act { display: inline-flex; align-items: center; padding: 0.3rem 0.6rem; border-radius: 3px; font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: none; border: 1px solid var(--calcite-color-border-1); background: var(--calcite-color-foreground-1); color: var(--calcite-color-text-link, #1b6ea8); }
+.dm-tip .dm-act:hover, .dm-tip .dm-act:focus-visible { text-decoration: none; background: var(--calcite-color-foreground-2); outline: 2px solid var(--calcite-color-brand); outline-offset: 1px; }
+.dm-tip .dm-del { border-color: #d83020; color: #b42515; }
+.dm-tip .dm-del:disabled { cursor: not-allowed; opacity: 0.55; }
+.dm-select-hint { margin: 0.4rem 0 0; padding: 0.4rem 0.6rem; border-inline-start: 3px solid #d83020; background: var(--calcite-color-foreground-2); font-size: 0.8125rem; color: var(--calcite-color-text-2); }

@@ -17,6 +17,7 @@ import {
   type LensId, type Motion, type Place, type Tween,
 } from './dot-layout';
 import { chartPalette, type ChartPalette } from './chart-palette';
+import { idsInRect, isDrag, normalise, type DragRect } from './dot-select';
 import { onSkinChange } from '../skin/skin';
 
 /*
@@ -40,6 +41,8 @@ const SHOW_SMALL_KEY = 'decluttering:dotmap.showSmall';
 const readShowSmall = (): boolean => { try { return localStorage.getItem(SHOW_SMALL_KEY) === '1'; } catch { return false; } };
 const writeShowSmall = (v: boolean): void => { try { localStorage.setItem(SHOW_SMALL_KEY, v ? '1' : '0'); } catch { /* private window or blocked storage: the choice just is not remembered */ } };
 const INSET = 16;
+/** ADR 0016: the ring on dots chosen for deleting, and the drag rectangle. Calcite's danger red reads on both looks. */
+const PICK_COLOUR = '#d83020';
 
 interface Sprite extends Dot {
   /** Index in `sprites` (hit test, keyboard). */
@@ -80,6 +83,21 @@ export class DcDotMap extends LitElement {
   @property({ type: Number, attribute: 'height-scale' }) heightScale = 1;
   /** DC-090: the stale zone's label, the starting point in force (the scan screen draws Balanced). */
   @property({ attribute: 'zone-label' }) zoneLabel: string = PRESET_NAMES.balanced;
+  /** ADR 0016 (Review): a click (or Enter) on a dot asks what to do, view it or delete it, instead of opening it at once. */
+  @property({ type: Boolean }) actions = false;
+  /** ADR 0016 (Review): dragging with a mouse or pen draws a rectangle; on release the dots in it go out as `dc-dots-select` ({ ids }). */
+  @property({ type: Boolean }) selectable = false;
+  /** ADR 0016: the ids chosen for deleting, drawn with a red ring. */
+  @property({ attribute: false }) selected: ReadonlySet<string> = new Set();
+  /** ADR 0016: why a dot can't be deleted ('' when it can). Absent: the dot's menu has no Delete. */
+  @property({ attribute: false }) deleteWhy: ((id: string) => string) | undefined;
+  /** The rectangle being drawn (px in the canvas), and whether the press has moved far enough to be a drag. */
+  private drag: (DragRect & { pointer: number }) | null = null;
+  private dragging = false;
+  /** The click that ends a drag is not a click on a dot. */
+  private eatClick = false;
+  /** The dot's menu is open (a re-render redraws it as the menu, not as the hover tip). */
+  private menuOpen = false;
   /** DC-079: layers under SMALL_LAYER_MB are left off the map unless the viewer asks for them (remembered per browser). */
   @state() private showSmall = readShowSmall();
   private floorMemo: { model: DotModel; show: boolean; lens: LensId; expected: number; out: { model: DotModel; hidden: HiddenSmall } } | null = null;
@@ -171,7 +189,7 @@ export class DcDotMap extends LitElement {
     else this.kick();
     if (this.tip && !this.tip.hidden) {
       const idx = this.hover ?? this.focusIdx;
-      if (idx >= 0) this.showTip(idx, false, this.touch ? 'tap' : this.focusIdx >= 0 ? 'key' : 'hover');
+      if (idx >= 0) this.showTip(idx, false, this.menuOpen ? 'menu' : this.touch ? 'tap' : this.focusIdx >= 0 ? 'key' : 'hover');
     }
   }
 
@@ -472,6 +490,19 @@ export class DcDotMap extends LitElement {
     const act = this.hover ?? (this.focusIdx >= 0 ? this.focusIdx : null);
     const a = act != null ? this.sprites[act] : undefined;
     if (a && a.rad) { ctx.strokeStyle = this.pal.focus; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(a.x, a.y, a.rad + 3.5, 0, 7); ctx.stroke(); }
+    if (this.selected.size) {
+      ctx.strokeStyle = PICK_COLOUR; ctx.lineWidth = 2;
+      for (const d of this.sprites) {
+        if (!this.selected.has(d.id) || (!d.rad && !d.shade)) continue;
+        ctx.beginPath(); ctx.arc(d.x, d.y, (d.rad || 2.5) + 2.5, 0, 7); ctx.stroke();
+      }
+    }
+    if (this.dragging && this.drag) {
+      const r = normalise(this.drag);
+      ctx.fillStyle = PICK_COLOUR; ctx.globalAlpha = 0.1; ctx.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+      ctx.globalAlpha = 1; ctx.strokeStyle = PICK_COLOUR; ctx.lineWidth = 1.5; ctx.setLineDash([5, 3]);
+      ctx.strokeRect(r.x0 + 0.5, r.y0 + 0.5, r.x1 - r.x0, r.y1 - r.y0); ctx.setLineDash([]);
+    }
   }
 
   private kick(): void { if (!this.raf && this.isConnected) this.raf = requestAnimationFrame(this.frame); }
@@ -516,17 +547,20 @@ export class DcDotMap extends LitElement {
    * FB-26: the hover tip is compact and has no link (the pointer would cross other dots on the way and the tip would jump).
    * A mouse click on the dot opens it; Enter does from the keyboard; only a tap (touch) pins the tip with its link.
    */
-  private showTip(i: number, announce: boolean, how: 'hover' | 'key' | 'tap' = 'hover'): void {
+  private showTip(i: number, announce: boolean, how: 'hover' | 'key' | 'tap' | 'menu' = 'hover'): void {
     const d = this.sprites[i]; if (!d) return;
     clearTimeout(this.hideTimer);
     const credits = d.credits >= 0.05 ? translate('scan.map.tip.monthly-credits', { credits: d.credits < 10 ? d.credits.toFixed(1) : fmtInt(d.credits) }) : translate('scan.map.tip.under-credits');
     render(html`<strong>${d.title}</strong><span class="dm-t-owner">${d.owner}</span>
       <span class="dm-t-row">${d.sized ? html`${formatMB(d.sizeMB)} · ${credits}` : translate('scan.map.tip.size-unmeasured')}</span>
       <span class="dm-t-why">${dotWhy(d)}</span>
-      ${how === 'tap'
+      ${how === 'menu' ? this.menu(d)
+        : how === 'tap' && !this.actions
         ? html`<a href=${this.urlOf(d)} target="_blank" rel="noopener">${translate('scan.map.tip.open')}<span class="dc-sr">${translate('scan.new-tab')}</span></a>`
-        : html`<span class="dm-t-hint">${translate(how === 'key' ? 'scan.map.tip.press-enter' : 'scan.map.tip.click')}${translate('scan.map.tip.to-open')}</span>`}`, this.tip);
-    this.tip.classList.toggle('is-pinned', how === 'tap');
+        : html`<span class="dm-t-hint">${translate(how === 'key' ? 'scan.map.tip.press-enter' : 'scan.map.tip.click')}${translate(this.actions ? 'scan.map.tip.to-menu' : 'scan.map.tip.to-open')}</span>`}`, this.tip);
+    this.tip.classList.toggle('is-pinned', how === 'tap' || how === 'menu');
+    this.tip.setAttribute('role', how === 'menu' ? 'dialog' : 'tooltip');
+    if (how === 'menu') this.tip.setAttribute('aria-label', d.title); else this.tip.removeAttribute('aria-label');
     this.tip.hidden = false;
     const tw = this.tip.offsetWidth, th = this.tip.offsetHeight;
     let x = d.x + d.rad + 10, y = d.y - th / 2;
@@ -535,8 +569,37 @@ export class DcDotMap extends LitElement {
     this.tip.style.transform = `translate(${x}px, ${y}px)`;
     if (announce) this.srLive.textContent = `${d.title}, ${d.owner}. ${dotWhy(d)}`;
   }
+  /** ADR 0016: the dot's menu: view it in ArcGIS Online, or delete it (disabled, with the reason, when it can't be). */
+  private menu(d: Sprite) {
+    const why = this.deleteWhy?.(d.id) ?? '';
+    return html`<span class="dm-t-actions" @keydown=${this.onMenuKey}>
+      <a class="dm-act" data-dot-action="view" href=${this.urlOf(d)} target="_blank" rel="noopener" @click=${() => this.closeMenu(false)}>${translate('scan.map.menu.view')}<span class="dc-sr">${translate('scan.new-tab')}</span></a>
+      ${this.deleteWhy ? html`<button type="button" class="dm-act dm-del" data-dot-action="delete" ?disabled=${!!why}
+        @click=${() => { this.closeMenu(false); this.dispatchEvent(new CustomEvent('dc-delete-request', { detail: { ids: [d.id] }, bubbles: true, composed: true })); }}>${translate('scan.map.menu.delete')}</button>` : nothing}
+    </span>${why ? html`<span class="dm-t-hint" data-dot-why>${why}</span>` : nothing}`;
+  }
+  private closeMenu(refocus: boolean): void { this.pinned = false; this.hover = null; this.hideTip(); this.kick(); if (refocus) this.canvas.focus(); }
+  private onMenuKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.closeMenu(true); } };
+  private openMenu(i: number): void {
+    clearTimeout(this.tipTimer); this.hover = i; this.pinned = true; this.menuOpen = true; this.showTip(i, true, 'menu'); this.kick();
+    requestAnimationFrame(() => this.tip.querySelector<HTMLElement>('.dm-act')?.focus());
+  }
+  private canvasPoint(e: { clientX: number; clientY: number }): { x: number; y: number } {
+    const b = this.canvas.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top };
+  }
+  private onUp = (e: PointerEvent): void => {
+    const d = this.drag, was = this.dragging;
+    this.drag = null; this.dragging = false;
+    if (!d || !was || e.pointerId !== d.pointer) return;
+    this.eatClick = true; setTimeout(() => { this.eatClick = false; }, 0);
+    const ids = idsInRect(this.sprites.map((s) => ({ id: s.id, x: s.x, y: s.y, drawn: s.rad > 0 || !!s.shade, view: s.view })), d);
+    this.dispatchEvent(new CustomEvent<{ ids: string[] }>('dc-dots-select', { detail: { ids }, bubbles: true, composed: true }));
+    this.srLive.textContent = tn('scan.map.select.done', ids.length, { count: fmtInt(ids.length) });
+    this.kick();
+  };
+  private onCancel = (): void => { this.drag = null; this.dragging = false; this.kick(); };
   private creditsText(c: number): string { return c >= 0.05 ? translate('scan.map.credits', { credits: c < 10 ? c.toFixed(1) : fmtInt(c) }) : translate('scan.map.under-credits'); }
-  private hideTip(): void { clearTimeout(this.tipTimer); clearTimeout(this.hideTimer); if (this.tip) this.tip.hidden = true; this.pinned = false; }
+  private hideTip(): void { clearTimeout(this.tipTimer); clearTimeout(this.hideTimer); if (this.tip) this.tip.hidden = true; this.pinned = false; this.menuOpen = false; }
   private scheduleHide(): void {
     clearTimeout(this.hideTimer);
     this.hideTimer = window.setTimeout(() => { if (!this.pinned) { this.hover = null; this.hideTip(); this.kick(); } }, 220);
@@ -546,8 +609,17 @@ export class DcDotMap extends LitElement {
     const b = this.canvas.getBoundingClientRect(); return this.hitTest(e.clientX - b.left, e.clientY - b.top);
   }
   private onMove = (e: PointerEvent): void => {
+    if (this.drag && e.pointerId === this.drag.pointer) {
+      const pt = this.canvasPoint(e); this.drag.x1 = pt.x; this.drag.y1 = pt.y;
+      if (!this.dragging && isDrag(this.drag)) {
+        this.dragging = true; try { this.canvas.setPointerCapture(e.pointerId); } catch { /* not capturable: the drag still works inside */ }
+        clearTimeout(this.tipTimer); this.hover = null; this.pinned = false; this.hideTip();
+      }
+      if (this.dragging) { this.canvas.style.cursor = 'crosshair'; this.kick(); return; }
+    }
+    if (this.actions && this.pinned) return; // the dot's menu stays put while the pointer travels to it
     const i = this.at(e);
-    this.canvas.style.cursor = i == null ? 'default' : 'pointer';
+    this.canvas.style.cursor = i != null ? 'pointer' : this.selectable ? 'crosshair' : 'default';
     if (i === this.hover) return;
     clearTimeout(this.tipTimer);
     this.hover = i; this.focusIdx = -1; this.pinned = false; this.kick();
@@ -556,11 +628,19 @@ export class DcDotMap extends LitElement {
     if (!this.tip.hidden) this.showTip(i, false); else this.tipTimer = window.setTimeout(() => this.showTip(i, false), TIP_DELAY);
   };
   private onLeave = (): void => { clearTimeout(this.tipTimer); this.scheduleHide(); };
-  private onDown = (e: PointerEvent): void => { this.touch = e.pointerType !== 'mouse'; };
+  private onDown = (e: PointerEvent): void => {
+    this.touch = e.pointerType !== 'mouse';
+    // ADR 0016: a mouse or pen press may start a rectangle; a finger scrolls the page instead.
+    if (!this.selectable || e.pointerType === 'touch' || e.button !== 0) return;
+    const pt = this.canvasPoint(e);
+    this.drag = { x0: pt.x, y0: pt.y, x1: pt.x, y1: pt.y, pointer: e.pointerId }; this.dragging = false;
+  };
   private onClick = (e: MouseEvent): void => {
+    if (this.eatClick) { this.eatClick = false; return; }
     const i = this.at(e);
     if (i == null) { this.pinned = false; this.hover = null; this.hideTip(); this.kick(); return; }
     const d = this.sprites[i];
+    if (this.actions && d) { this.openMenu(i); return; } // ADR 0016: Review asks first (view or delete)
     if (!this.touch && d) { window.open(this.urlOf(d), '_blank', 'noopener'); return; } // mouse: the dot is the link
     this.hover = i; this.pinned = true; this.showTip(i, true, 'tap'); this.kick(); // touch: a tap pins the tip with its link
   };
@@ -578,10 +658,14 @@ export class DcDotMap extends LitElement {
       this.focusIdx = ord[cur < 0 && e.key !== 'End' && e.key !== 'Home' ? 0 : nx] as number;
       this.hover = null; this.pinned = true; this.showTip(this.focusIdx, true, 'key'); this.kick();
     } else if (e.key === 'Enter' && this.focusIdx >= 0) {
+      if (this.actions) { e.preventDefault(); this.openMenu(this.focusIdx); return; }
       const d = this.sprites[this.focusIdx]; if (d) window.open(this.urlOf(d), '_blank', 'noopener');
     } else if (e.key === 'Escape') { this.focusIdx = -1; this.hideTip(); this.kick(); }
   };
-  private onBlur = (): void => { if (!this.tip.matches(':hover')) { this.focusIdx = -1; this.hideTip(); this.kick(); } };
+  private onBlur = (e: FocusEvent): void => {
+    if (this.pinned && this.actions && e.relatedTarget instanceof Node && this.tip.contains(e.relatedTarget)) return; // focus went into the dot's menu
+    if (!this.tip.matches(':hover')) { this.focusIdx = -1; this.hideTip(); this.kick(); }
+  };
 
   protected override render() {
     const f = this.floored(this.model);
@@ -610,12 +694,13 @@ export class DcDotMap extends LitElement {
         <div class="dm-stage">
           <canvas tabindex="0" role="application" aria-roledescription=${translate('scan.map.canvas-title')} aria-describedby="dc-dm-help dc-dm-tip" data-scan="dots"
             aria-label=${translate('scan.map.aria', { dense: dense ? translate('scan.map.aria.density') : '', hidden: hiddenNote && !this.showSmall ? translate('scan.map.aria.hidden', { label: hiddenNote }) : '' })}
-            @pointermove=${this.onMove} @pointerleave=${this.onLeave} @pointerdown=${this.onDown} @click=${this.onClick} @keydown=${this.onKey} @blur=${this.onBlur}></canvas>
+            @pointermove=${this.onMove} @pointerleave=${this.onLeave} @pointerdown=${this.onDown} @pointerup=${this.onUp} @pointercancel=${this.onCancel} @click=${this.onClick} @keydown=${this.onKey} @blur=${this.onBlur}></canvas>
           <div class="dm-tip" id="dc-dm-tip" role="tooltip" hidden
             @pointerenter=${() => clearTimeout(this.hideTimer)} @pointerleave=${() => this.scheduleHide()}></div>
           <div class="dm-sr" aria-live="polite"></div>
-          <p class="dm-sr" id="dc-dm-help" data-scan="dots-help">${ready ? tn('scan.map.help.ready', m.dots.length, { count: fmtInt(m.dots.length), stale: fmtInt(m.dots.filter((d) => d.kind === 'stale').length) }) : translate('scan.map.help.waiting')}${translate('scan.map.help.keys')}</p>
+          <p class="dm-sr" id="dc-dm-help" data-scan="dots-help">${ready ? tn('scan.map.help.ready', m.dots.length, { count: fmtInt(m.dots.length), stale: fmtInt(m.dots.filter((d) => d.kind === 'stale').length) }) : translate('scan.map.help.waiting')}${translate(this.actions ? 'scan.map.help.keys-actions' : 'scan.map.help.keys')}</p>
         </div>
+        ${this.selectable ? html`<p class="dm-select-hint" data-scan="select-hint"><b>${translate('scan.map.select.hintLead')}</b> ${translate('scan.map.select.hint')}</p>` : nothing}
         <div class="dm-legend">
           <span class="dm-lg"><span class="dm-ramp" style="background: linear-gradient(90deg, ${this.pal.ramp.from}, ${this.pal.ramp.mid}, ${this.pal.ramp.to})"></span><span class="dm-ramp-labels"><span>${translate('scan.map.legend.barely')}</span><span>${translate('scan.map.legend.very')}</span></span></span>
           ${dense

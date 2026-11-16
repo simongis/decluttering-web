@@ -151,7 +151,9 @@ flowchart LR
 ![Your data: your browser talks only to your own ArcGIS Online org](docs/images/about-data.png)
 
 ## Deleting layers (off by default)
-A build made with `VITE_DELETING=on` adds a **Delete…** button and a **Select to delete** checkbox to every layer row on Review (and Delete in the layer's panel). A bar above the list has **Select all**, shows how many layers and how much storage are selected, and **Delete selected…**. This selection is separate from the email ticks. It is for layers you have decided are obsolete or take too much space.
+A build made with `VITE_DELETING=on` adds a **Delete…** button and a **Select to delete** checkbox to every layer row on Review (and Delete in the layer's panel). A bar above the list has **Select all**, shows how many layers and how much storage are selected, and **Delete selected…**. This selection is separate from the email ticks.
+
+On the Review chart, **drag a rectangle** over the dots to add those layers to the selection, whether or not they meet the rule (each rectangle adds). A **click on a dot** asks whether to **View item** in ArcGIS Online or **Delete…** it. It is for layers you have decided are obsolete or take too much space.
 
 - **Whose layers:** a member with Esri's *Create, update, and delete content* privilege (`portal:user:createItem`) can delete their own layers. An admin with the *Delete items* privilege (`portal:admin:deleteItems`) can delete anyone's. The app asks ArcGIS Online with your account, and ArcGIS Online decides.
 - **After the scan:** the buttons switch on once maps and apps have been checked, so "used by" can be trusted. The dialog warns when a map or app still uses a layer.
