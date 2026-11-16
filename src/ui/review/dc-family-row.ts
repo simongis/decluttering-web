@@ -5,6 +5,7 @@ import { LocaleController } from '../../i18n/controller';
 import { t } from '../../i18n';
 import '@esri/calcite-components/dist/components/calcite-list';
 import '@esri/calcite-components/dist/components/calcite-list-item';
+import '@esri/calcite-components/dist/components/calcite-button';
 import '@esri/calcite-components/dist/components/calcite-checkbox';
 import '@esri/calcite-components/dist/components/calcite-label';
 import '@esri/calcite-components/dist/components/calcite-chip';
@@ -47,6 +48,8 @@ export class DcFamilyRow extends LitElement {
   /** Member mode: shows "Mark as done" instead of a tick. */
   @property({ type: Boolean }) member = false;
   @property({ type: Boolean }) done = false;
+  /** ADR 0016: show a Delete button on the row (the user may delete this layer, and deleting is on). */
+  @property({ type: Boolean }) deletable = false;
   /** False while maps and apps are still being read: no used-by count, no "Tidy with care". */
   @property({ type: Boolean }) depsKnown = true;
   @property({ type: Boolean, attribute: 'show-usage' }) showUsage = true;
@@ -122,6 +125,8 @@ export class DcFamilyRow extends LitElement {
           <calcite-chip class="c-plain" scale="s" appearance="outline-fill" kind="neutral" data-size=${r.sizeKnown ? 'known' : 'unknown'} label=${saySize(r, this.stopped)}>${saySize(r, this.stopped)}</calcite-chip>
           ${r.sizeKnown ? html`<calcite-chip class="c-reclaim" scale="s" appearance="outline-fill" kind="neutral" label=${sayCredits(r)} title=${sayCredits(r)}><i class="sw reclaim"></i>≈ ${credit(r.credits)} ${t('review.fig.creditsMonth')}</calcite-chip>` : nothing}
           ${this.cue(r)}
+          ${this.deletable ? html`<calcite-button class="row-delete" data-action="delete-row" scale="s" kind="danger" appearance="outline" icon-start="trash" label=${t('review.delete.actionLabel', { title: s.title })}
+            @click=${() => this.dispatchEvent(new CustomEvent('dc-delete-request', { detail: { ids: [s.id] }, bubbles: true, composed: true }))}>${t('review.delete.action')}</calcite-button>` : nothing}
         </div>
         </div>
         ${r.views.map((v) => html`<calcite-list-item value=${v.id}>

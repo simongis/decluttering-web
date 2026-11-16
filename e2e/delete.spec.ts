@@ -61,3 +61,16 @@ test('demo: Cancel leaves everything as it was; the ticked rows open the same di
   await expect(dialog(page)).not.toHaveAttribute('open', '');
   expect(await page.locator('dc-family-row').count()).toBe(before);
 });
+
+test('demo: every row has a visible Delete button that opens the dialog for that layer only', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/#/demo');
+  await reviewReady(page);
+  const rows = page.locator('dc-family-row');
+  expect(await page.locator('dc-family-row [data-action="delete-row"]').count()).toBe(await rows.count());
+  await rows.first().locator('[data-action="delete-row"]').click();
+  await expect(dialog(page)).toHaveAttribute('open', '');
+  await expect(page.locator('dc-delete-dialog [data-delete-item]')).toHaveCount(1);
+  await page.locator('dc-delete-dialog [data-action="delete-cancel"]').click();
+  await expect(dialog(page)).not.toHaveAttribute('open', '');
+});

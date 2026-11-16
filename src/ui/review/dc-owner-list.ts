@@ -160,7 +160,7 @@ export class DcOwnerList extends LitElement {
   private row(r: Row, on: boolean) {
     const sc = this.scale();
     return html`<dc-family-row .row=${r} .org=${this.org} .why=${this.why(r)} .on=${on} ?selectable=${this.selectable}
-      ?member=${this.member} .done=${this.done.has(r.source.id)} .showUsage=${this.canSeeUsage} .depsKnown=${this.depsKnown} .stopped=${this.stopped}
+      ?member=${this.member} .done=${this.done.has(r.source.id)} ?deletable=${!!this.canDelete?.(r.source.owner)} .showUsage=${this.canSeeUsage} .depsKnown=${this.depsKnown} .stopped=${this.stopped}
       .bars=${sc ? rowBars(r.family, sc.ctx) : null} .top=${sc?.top ?? 0} .scanRef=${sc?.ctx.ref ?? 0}></dc-family-row>`;
   }
 
@@ -177,7 +177,7 @@ export class DcOwnerList extends LitElement {
    * Everything a card draws is in the list, so a change to any of it draws every card again.
    */
   private cardOf(o: OwnerGroup) {
-    return guard([o, this.expanded.has(o.owner.username), this.items, this.done, this.sort, this.selectable, this.member, this.canSeeUsage,
+    return guard([o, this.expanded.has(o.owner.username), this.items, this.done, this.sort, this.selectable, this.member, this.canSeeUsage, this.canDelete,
       this.depsKnown, this.stopped, this.org, this.nudgeNotes.get(o.owner.username), this.thumbs?.get(o.owner.username), getLocale(), this.scale()?.top, this.scale()?.ctx], () => this.card(o));
   }
 
