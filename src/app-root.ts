@@ -10,7 +10,7 @@ import type { DemoOrg } from './demo/demo-org';
 import type { CacheEntry } from './cache/scanCache';
 import { canRescan, rescanClock } from './cache/rescan';
 import { rescanEstimate } from './ui/scan/estimate';
-import { loadCached, runScan, type ScanTap } from './routes/scan-run';
+import { loadCached, pruneCached, runScan, type ScanTap } from './routes/scan-run';
 import type { ScanStages } from './scan/types';
 import { INITIAL_FLOW, nextFlow, type Flow, type FlowEvent } from './ui/scan/scan-flow';
 import { APP_TITLE, createEtaSmoother, currentLine, tabTitle, usageIn } from './ui/scan/stages-view';
@@ -45,6 +45,10 @@ import { TURN_OFF, turnOffSending } from './ui/access/turn-off';
 import './ui/steps/dc-steps';
 import { stepsFor, type StepId } from './ui/steps/steps';
 import { createSessionNotifier, WritesDisabled, type GroupNotifier } from './notify';
+import { createSessionRemover } from './remove/session';
+import { pruneRemoved } from './remove/plan';
+import { createDemoRemover } from './demo/demo-remover';
+import type { ItemRemover } from './remove/remover';
 import { createSessionNudgeLog, type NudgeLog } from './log';
 import { PORTAL_URL } from './auth/config';
 import { autoStartReviewTour, closeReviewTour, openReviewTour } from './ui/tour';
@@ -699,7 +703,7 @@ export class AppRoot extends LitElement {
     const d = this.demoData;
     return html`
       ${this.error ? html`<p role="alert">${this.error}</p>` : nothing}
-      <div ?hidden=${emails}>${d ? renderReview({ data: d, mode: 'admin', canSeeUsage: true, emailsRoute: 'demo-emails' }) : nothing}</div>
+      <div ?hidden=${emails}>${d ? renderReview({ data: d, mode: 'admin', canSeeUsage: true, emailsRoute: 'demo-emails', username: DEMO_USER.username, deleteScope: 'all', remover: (this.demoRemover ??= createDemoRemover()), onRemoved: this.onRemoved }) : nothing}</div>
       ${emails && d ? html`<app-emails demo .admin=${DEMO_ADMIN} orgId=${d.org.id} orgName=${d.org.name} writable></app-emails>` : nothing}`;
   }
 
@@ -724,7 +728,7 @@ export class AppRoot extends LitElement {
       <div ?hidden=${onScan || emails}>
         ${this.renderScanStatus()}
         <div data-scan-state=${this.stopped ? 'stopped' : this.background || this.flow.state === 'scanning' ? 'running' : 'done'} data-demo="play">
-          ${renderReview({ data, mode: 'admin', canSeeUsage: true, depsKnown: this.depsKnown, stopped: this.stopped, emailsRoute: 'demo-emails' })}
+          ${renderReview({ data, mode: 'admin', canSeeUsage: true, depsKnown: this.depsKnown, stopped: this.stopped, emailsRoute: 'demo-emails', username: DEMO_USER.username, deleteScope: 'all', remover: (this.demoRemover ??= createDemoRemover()), onRemoved: this.onRemoved })}
         </div>
       </div>` : nothing}
       ${emails && data ? html`<app-emails demo .admin=${DEMO_ADMIN} orgId=${data.org.id} orgName=${data.org.name} writable></app-emails>` : nothing}`;
@@ -847,6 +851,24 @@ export class AppRoot extends LitElement {
     }
   }
 
+  /** ADR 0016: the session remover, only for a signed-in user whose build and privileges allow deleting (never the simulator). Built once per session. */
+  private removerFor: { manager: ArcGISIdentityManager; scope: string; remover: ItemRemover } | null = null;
+  private remover(): ItemRemover | null {
+    const m = this.manager, a = this.access, scope = a?.deleteScope;
+    if (!m || !a || this.simulated || (scope !== 'all' && scope !== 'own')) return null;
+    if (this.removerFor?.manager === m && this.removerFor.scope === scope) return this.removerFor.remover;
+    this.removerFor = { manager: m, scope, remover: createSessionRemover(m, { portal: PORTAL_URL, self: a.username, scope }) };
+    return this.removerFor.remover;
+  }
+  private demoRemover: ItemRemover | null = null;
+  /** ADR 0016: deleted layers leave the list on screen, the scan kept for Resume, and the saved scan. */
+  private onRemoved = (e: CustomEvent<{ ids: string[] }>): void => {
+    const ids = new Set(e.detail.ids);
+    if (this.data) this.data = pruneRemoved(this.data, ids);
+    if (this.demoData) this.demoData = pruneRemoved(this.demoData, ids);
+    if (this.lastEntry) this.lastEntry = { ...this.lastEntry, data: pruneRemoved(this.lastEntry.data, ids) };
+    if (this.access && !this.simulated && !this.demoOrg) void pruneCached(this.access, e.detail.ids);
+  };
   private renderSignedIn(view: 'app' | 'review' | 'emails') {
     if (this.busy || !this.access) return html`<p data-page="loading">${t('shell.access.loading')}</p>`;
     const a = this.access, data = this.data;
@@ -858,7 +880,7 @@ export class AppRoot extends LitElement {
       ${this.renderScanStatus()}
       <div data-scan-state=${this.stopped ? 'stopped' : this.background || this.flow.state === 'scanning' ? 'running' : 'done'} data-read-only=${String(!a.writable)}>
         ${!a.writable && a.mode !== 'my-items' ? html`<p role="note" data-note="read-only">${t('shell.access.readOnly')}</p>` : nothing}
-        ${renderReview({ data, mode: a.mode, canSeeUsage: canSeeUsage(a.usageReadable), username: a.username, note: this.noteText, refreshing: this.refreshing, depsKnown: this.depsKnown, stopped: this.stopped, rescan: this.rescanOffer, onRescan: this.rescan })}
+        ${renderReview({ data, mode: a.mode, canSeeUsage: canSeeUsage(a.usageReadable), username: a.username, note: this.noteText, refreshing: this.refreshing, depsKnown: this.depsKnown, stopped: this.stopped, rescan: this.rescanOffer, onRescan: this.rescan, deleteScope: a.deleteScope ?? 'none', remover: this.remover(), onRemoved: this.onRemoved })}
       </div>
       </div>` : nothing}
       ${view === 'emails' && !onScan ? html`<app-emails ?demo=${!!this.simulated} .manager=${this.manager} .admin=${{ name: a.fullName || a.username, username: a.username, ...(a.email !== undefined ? { email: a.email } : {}) }} orgId=${a.orgId} orgName=${a.orgName} ?writable=${a.writable}></app-emails>` : nothing}`;

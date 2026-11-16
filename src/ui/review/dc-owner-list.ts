@@ -51,6 +51,8 @@ export class DcOwnerList extends LitElement {
   @property({ type: Boolean }) depsKnown = true;
   @property() sort: SortKey = 'priority';
   @property({ type: Boolean, attribute: 'can-see-usage' }) canSeeUsage = true;
+  /** ADR 0016: whether the user may delete a layer owned by this username (the item panel's Delete button). */
+  @property({ attribute: false }) canDelete: ((owner: string) => boolean) | undefined;
   /** The scan was stopped early (wording only: "not measured", "not checked"). */
   @property({ type: Boolean }) stopped = false;
   /** DC-096: username to extra words for the "Nudged" chip, e.g. "2 of 4 gone". */
@@ -167,7 +169,7 @@ export class DcOwnerList extends LitElement {
     return html`<svg class="ub-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs><pattern id=${HATCH_ID} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="4" class="hb"></rect><line x1="0" y1="0" x2="0" y2="4" class="hl"></line></pattern></defs></svg>
       ${this.canSeeUsage ? html`<dc-usage-peek .root=${this}></dc-usage-peek>` : nothing}
       <dc-item-panel .data=${this.data} .org=${this.org} .countSweeps=${this.countSweeps} .depsKnown=${this.depsKnown} .stopped=${this.stopped}
-        .member=${this.member} .canSeeUsage=${this.canSeeUsage}></dc-item-panel>`;
+        .member=${this.member} .canSeeUsage=${this.canSeeUsage} .canDelete=${this.canDelete}></dc-item-panel>`;
   }
 
   /**

@@ -21,6 +21,7 @@ import '@esri/calcite-components/dist/components/calcite-select';
 import '@esri/calcite-components/dist/components/calcite-option';
 import '@esri/calcite-components/dist/components/calcite-segmented-control';
 import '@esri/calcite-components/dist/components/calcite-segmented-control-item';
+import '@esri/calcite-components/dist/components/calcite-button';
 import { LocaleController } from '../../i18n/controller';
 import { formatDate, formatNumber, getLocale, t, tn } from '../../i18n';
 import type { Data, Dependency, Org, Row, Service } from '../../domain/types';
@@ -59,6 +60,8 @@ export class DcItemPanel extends LitElement {
   /** Member mode (my items): maps and apps are not checked for this view. */
   @property({ type: Boolean }) member = false;
   @property({ type: Boolean }) canSeeUsage = true;
+  /** ADR 0016: whether the user may delete a layer owned by this username. Absent: no Delete button. */
+  @property({ attribute: false }) canDelete: ((owner: string) => boolean) | undefined;
 
   @state() private open = false;
   @state() private row: Row | null = null;
@@ -540,6 +543,8 @@ export class DcItemPanel extends LitElement {
             <div class="ip-top">
               <span class="ip-chips">${statusChip(m.contentStatus)}</span>
               <calcite-link href=${itemUrl(this.org, m.id)} target="_blank" rel="noopener" icon-end="launch">${t('review.panel.open')}</calcite-link>
+              ${this.canDelete?.(r.source.owner) ? html`<calcite-button data-action="delete-item" scale="s" kind="danger" appearance="outline" icon-start="trash" label=${t('review.delete.actionLabel', { title: r.source.title })}
+                @click=${() => this.dispatchEvent(new CustomEvent('dc-delete-request', { detail: { ids: [r.source.id] }, bubbles: true, composed: true }))}>${t('review.delete.action')}</calcite-button>` : nothing}
             </div>
             <section class="ip-usage" aria-labelledby="ip-u-h">
               <div class="ip-sh"><h3 id="ip-u-h">${t('review.panel.usage')}</h3>

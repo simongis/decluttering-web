@@ -12,7 +12,7 @@ Thanks for helping. Bug reports, ideas, wording fixes and pull requests are all 
   npm run typecheck && npm run lint && npm test && npm run e2e
   ```
 
-- The app never deletes, unshares or changes anyone's items. Changes that do will not be merged.
+- The app never unshares, moves or edits anyone's items. Changes that do will not be merged. Deleting layers is the one exception (ADR 0016): off unless `VITE_DELETING=on`, behind its own allow-list (`src/remove/guard.ts`), confirmed every time and never permanent.
 - Everything runs in the browser. There is no backend, and nothing leaves the admin's own ArcGIS Online org.
 
 ## Writing copy

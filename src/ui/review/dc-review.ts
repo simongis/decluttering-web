@@ -66,6 +66,8 @@ export class DcReview extends LitElement {
   @property({ attribute: false }) org!: Org;
   @property() mode: ReviewMode = 'admin';
   @property({ type: Boolean, attribute: 'can-see-usage' }) canSeeUsage = true;
+  /** ADR 0016: whether the signed-in user may delete a layer owned by this username. Absent: the item panel offers no delete. */
+  @property({ attribute: false }) canDelete: ((owner: string) => boolean) | undefined;
   @property({ attribute: false }) thresholds: Thresholds = { ...PRESETS.balanced };
   /** False while maps and apps are still being read: used-by is unknown, so that rule is skipped. */
   @property({ type: Boolean }) depsKnown = true;
@@ -426,7 +428,7 @@ export class DcReview extends LitElement {
     const list = !everyone.length ? this.emptyState() : html`<dc-owner-list .owners=${owners} .org=${this.org} .thresholds=${this.thresholds}
       .items=${this.items} .done=${this.done} .filterOwner=${this.filterOwner} .sort=${this.activeSort} ?selectable=${this.selectable} ?member=${personal}
       .canSeeUsage=${this.canSeeUsage} .depsKnown=${this.depsKnown} .stopped=${this.stopped} .nudgeNotes=${this.nudgeNotes()}
-      .data=${this.data} .countSweeps=${this.countSweeps}></dc-owner-list>`;
+      .data=${this.data} .countSweeps=${this.countSweeps} .canDelete=${this.canDelete}></dc-owner-list>`;
     const startNone = this.startOnly && !owners.length && everyone.length > 0;
 
     const notes = [this.depsNote(), this.sizesNote(owners), this.useNote(), this.sweepNote()].filter((n) => n !== nothing);

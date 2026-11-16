@@ -1,6 +1,6 @@
 # Deploys the app to GitHub Pages. Lives at publish/github/workflows/ in the private repo and is copied
 # to .github/workflows/ by publish/export.mjs. One-time setup: Settings > Pages > Source: GitHub Actions.
-# Repository variables: VITE_ARCGIS_CLIENT_ID (public client ID), VITE_CF_BEACON_TOKEN (optional), VITE_SENDING (off|list|opt-in; unset means off).
+# Repository variables: VITE_ARCGIS_CLIENT_ID (public client ID), VITE_CF_BEACON_TOKEN (optional), VITE_SENDING (off|list|opt-in; unset means off), VITE_DELETING (on; unset means off).
 name: Deploy to GitHub Pages
 
 on:
@@ -35,6 +35,7 @@ jobs:
           VITE_ARCGIS_CLIENT_ID: ${{ vars.VITE_ARCGIS_CLIENT_ID }}
           # Empty (unset) means off: the public site stays review-only until this variable is set (ADR 0013).
           VITE_SENDING: ${{ vars.VITE_SENDING }}
+          VITE_DELETING: ${{ vars.VITE_DELETING }}
           VITE_CF_BEACON_TOKEN: ${{ vars.VITE_CF_BEACON_TOKEN }}
           # About links to this repository (and its Issues page).
           VITE_REPO_URL: https://github.com/${{ github.repository }}

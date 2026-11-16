@@ -451,3 +451,11 @@ dc-item-panel calcite-panel { height: 100%; box-shadow: -8px 0 24px rgb(0 0 0 / 
   .ip .lc:empty { display: none; }
 }
 @media (max-width: 600px) { .ip { padding-inline: 16px; } }
+
+/* ADR 0016: the delete dialog and its note. */
+.dd-list { margin: 0.5rem 0; padding: 0; list-style: none; max-height: 16rem; overflow-y: auto; display: grid; gap: 0.5rem; }
+.dd-list li { display: grid; gap: 0.1rem; padding-inline-start: 0.75rem; border-inline-start: 3px solid var(--calcite-color-border-2); }
+.dd-meta { color: var(--calcite-color-text-3); font-size: 0.8125rem; }
+.dd-warn { color: var(--calcite-color-status-danger-text, var(--calcite-color-status-danger)); font-size: 0.8125rem; }
+.dd-total { margin-block: 0.5rem; font-weight: 500; }
+[data-note="delete-waiting"] { margin: 0.75rem 0 0; color: var(--calcite-color-text-3); font-size: 0.8125rem; }

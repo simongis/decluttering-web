@@ -4,13 +4,13 @@
 
 ### [**Open the app →**](https://simongis.github.io/decluttering-web/)
 
-Decluttering finds the hosted feature layers in your org that nobody seems to use, shows you why each one was picked out and what it costs in credits, and helps you send each owner **one friendly email** about them. Owners decide what happens to their own layers. The app **never deletes, moves or changes anyone's items**.
+Decluttering finds the hosted feature layers in your org that nobody seems to use, shows you why each one was picked out and what it costs in credits, and helps you send each owner **one friendly email** about them. Owners decide what happens to their own layers. The app **never moves or changes anyone's items**, and it **only deletes** when a build has deleting turned on (it is off unless `VITE_DELETING=on`) and you confirm each delete yourself (see [Deleting layers](#deleting-layers-off-by-default)).
 
 It runs entirely in your browser. There is no Decluttering server, and nothing goes anywhere except your own ArcGIS Online org.
 
 > **Try it without signing in:** open the site and choose **Try the demo**. It plays a full scan of a made-up council's org, then lets you review the results and write the emails. Nothing is sent and nothing leaves your browser.
 
-> **New, and built by one person.** Decluttering is version 1, so treat it as early days. Scanning and review only read your org. Emails go out only after you turn sending on and send yourself a test, and the app never deletes, moves or changes anyone's items. It's provided as is (see [Disclaimer](#disclaimer)); please [raise an issue](https://github.com/simongis/decluttering-web/issues) if something looks off. Ideas, feedback and collaborators are very welcome (see [Contributing and support](#contributing-and-support)).
+> **New, and built by one person.** Decluttering is version 1, so treat it as early days. Scanning and review only read your org. Emails go out only after you turn sending on and send yourself a test, and the app never moves or changes anyone's items. Deleting is off unless a build turns it on (see [Deleting layers](#deleting-layers-off-by-default)). It's provided as is (see [Disclaimer](#disclaimer)); please [raise an issue](https://github.com/simongis/decluttering-web/issues) if something looks off. Ideas, feedback and collaborators are very welcome (see [Contributing and support](#contributing-and-support)).
 
 ![Review: the rule on the left, the stale zone chart and the owners on the right](docs/images/review.png)
 
@@ -150,6 +150,17 @@ flowchart LR
 
 ![Your data: your browser talks only to your own ArcGIS Online org](docs/images/about-data.png)
 
+## Deleting layers (off by default)
+A build made with `VITE_DELETING=on` adds a **Delete…** button to a layer's panel, and **Delete ticked layers…** to the action bar on Review. It is for layers you have decided are obsolete or take too much space.
+
+- **Whose layers:** a member with Esri's *Create, update, and delete content* privilege (`portal:user:createItem`) can delete their own layers. An admin with the *Delete items* privilege (`portal:admin:deleteItems`) can delete anyone's. The app asks ArcGIS Online with your account, and ArcGIS Online decides.
+- **After the scan:** the buttons switch on once maps and apps have been checked, so "used by" can be trusted. The dialog warns when a map or app still uses a layer.
+- **Confirmed every time:** a dialog lists each layer, its owner, its size and its views (which are deleted with it), and asks you to type `DELETE`.
+- **Never permanent:** the app sends a normal delete, never `permanentDelete`. Layers with delete protection are skipped and reported.
+- **Checked first:** just before it deletes a layer the app reads it again and skips it if it is no longer a hosted feature layer, has a different owner, or is protected.
+
+See [ADR 0016](docs/adr/0016-deleting-layers.md). The demo shows the whole flow without touching anything.
+
 ## Sending is switched on by each admin
 
 Anyone can sign in and review. Sending is off until **you** turn it on for yourself, inside the app:
@@ -225,7 +236,7 @@ Checks: `npm run typecheck && npm run lint && npm test && npm run e2e`.
 - Decluttering is an independent, open-source project. It is not an Esri or Esri Australia product, and it is not endorsed or supported by either.
 - It is provided **"as is", without warranty of any kind**, and without liability for any loss or damage, as set out in the Apache License 2.0 (sections 7 and 8). You use it at your own risk.
 - You are responsible for how you use it in your organisation: whose content you review, and any email you choose to send to colleagues. Check that it fits your organisation's policies first, and send yourself a test before anyone else gets an email.
-- The app never deletes, unshares or changes anyone's items. What an owner does after a nudge is their decision.
+- The app never unshares, moves or edits anyone's items. Deleting is off by default (see [Deleting layers](#deleting-layers-off-by-default)). What an owner does after a nudge is their decision.
 - ArcGIS and Esri are trademarks of Esri. They are used here only to describe what the app works with.
 
 ## Contributing and support

@@ -11,6 +11,7 @@ import type { PhaseId, RequestFn, ScanProgress, ScanStages } from '../scan/types
 import { createSessionNudgeLog, getNudgeSends, mergeLogReads, seededNudgeLog, setNudgeLog, setNudgeSources, setNudgeSummary, type NudgeLog, type OthersRead } from '../log';
 import { sinceNudges } from '../domain/outcomes';
 import { t } from '../i18n';
+import { pruneRemoved } from '../remove/plan';
 
 export const PHASE_ORDER: PhaseId[] = ['find', 'size', 'views', 'usage', 'owners', 'deps'];
 
@@ -264,6 +265,19 @@ export async function loadCached(access: AccessInfo): Promise<{ entry: CacheEntr
     const entry = await getCache().load(access.orgId, access.username);
     return entry ? { entry, note: staleness(entry, new Date()) } : undefined;
   } catch { return undefined; }
+}
+
+/** ADR 0016: takes deleted services out of the saved scan, so the next visit doesn't list them. Best effort: a miss only means the next scan fixes it. */
+export async function pruneCached(access: Pick<AccessInfo, 'orgId' | 'username'>, ids: readonly string[]): Promise<void> {
+  try {
+    const c = getCache();
+    const entry = await c.load(access.orgId, access.username);
+    if (!entry) return;
+    const data = pruneRemoved(entry.data, ids);
+    if (data === entry.data) return;
+    const { depsReadAt, incomplete, fullScan } = entry;
+    await c.save(access.orgId, access.username, data, entry.fetchedAt, { ...(depsReadAt ? { depsReadAt } : {}), ...(incomplete ? { incomplete } : {}), ...(fullScan ? { fullScan } : {}) });
+  } catch { /* storage unavailable */ }
 }
 
 /** Dev only: force lazy sizing on a small org for a real-run check (localStorage `decluttering:lazySizeThreshold`). */
