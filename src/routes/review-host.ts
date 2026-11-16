@@ -196,15 +196,13 @@ export class AppReview extends LitElement {
     return html`<dc-delete-dialog .open=${this.del.open} .items=${this.del.items} .leftOut=${this.del.leftOut} .user=${this.username} .remover=${this.remover}
       @dc-delete-close=${() => { this.del = { ...this.del, open: false }; }}></dc-delete-dialog>`;
   }
-  /** The action bar (admin only): what's ticked, "Delete…" when the user may delete, and "Next: write the emails". */
+  /** The action bar (admin only): what's ticked, and "Next: write the emails". */
   private actionBar() {
     if (this.mode !== 'admin' || this.selection.solo) return nothing;
     const s = this.selection, n = s.owners.length;
     return html`<div class="actionbar" data-bar="review" role="region" aria-label=${t('shell.review.nextStep')}>
       <div class="actionbar-sum"><b data-bar-main>${n ? tn('shell.review.ownerSummary', n, { count: formatNumber(n), services: tn('shell.review.serviceCount', s.services, { count: formatNumber(s.services) }), credits: credit(s.credits) }) : t('shell.review.noOwners')}</b>
         <span>${n ? t('shell.review.nothingSent') : t('shell.review.tickOwner')}</span></div>
-      ${this.deleting ? html`<calcite-button data-action="delete-ticked" kind="danger" appearance="outline" icon-start="trash" ?disabled=${n === 0} title=${t('review.delete.bulkNote')}
-        @click=${() => this.askDelete(s.items)}>${t('review.delete.bulk')}</calcite-button>` : nothing}
       <calcite-button data-action="to-emails" icon-end="arrow-right" ?disabled=${n === 0} @click=${this.next}>${t('shell.review.nextEmails')}</calcite-button>
     </div>`;
   }

@@ -45,23 +45,41 @@ test('demo: the item panel deletes a layer after the typed confirmation, and the
   if (title) await expect(page.locator('dc-family-row', { hasText: title })).toHaveCount(0);
 });
 
-test('demo: Cancel leaves everything as it was; the ticked rows open the same dialog', async ({ page }) => {
+test('demo: choosing layers with the checkboxes counts them, Select all picks every row, and Delete selected opens the dialog', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/#/demo');
   await reviewReady(page);
   const before = await page.locator('dc-family-row').count();
-  const bulk = page.locator('[data-action="delete-ticked"]');
-  await expect(bulk).toBeVisible();
+  const bulk = page.locator('[data-action="delete-selected"]');
+  await expect(bulk).toHaveAttribute('disabled', '');
+  await expect(page.locator('[data-del-count]')).toContainText('Select the layers');
+  await page.locator('dc-family-row [data-action="pick-delete"]').nth(0).click();
+  await page.locator('dc-family-row [data-action="pick-delete"]').nth(1).click();
+  await expect(page.locator('[data-del-count]')).toContainText('2 layers selected');
+  await expect(bulk).not.toHaveAttribute('disabled', '');
+  await page.locator('[data-action="del-all"]').click();
+  await expect(page.locator('[data-del-count]')).toContainText(`${before} layers selected`);
+  await page.locator('[data-action="del-all"]').click();
+  await expect(page.locator('[data-del-count]')).toContainText('Select the layers');
+  await page.locator('dc-family-row [data-action="pick-delete"]').nth(0).click();
+  await page.locator('dc-family-row [data-action="pick-delete"]').nth(1).click();
   await bulk.click();
   await expect(dialog(page)).toHaveAttribute('open', '');
-  expect(await page.locator('dc-delete-dialog [data-delete-item]').count()).toBeGreaterThan(0);
-  const results = await new AxeBuilder({ page }).include('dc-delete-dialog').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
+  await expect(page.locator('dc-delete-dialog [data-delete-item]')).toHaveCount(2);
+  const results = await new AxeBuilder({ page }).include('dc-delete-dialog').include('[data-bar="delete-select"]').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
   expect(results.violations.map((v) => v.id)).toEqual([]);
   await page.locator('dc-delete-dialog [data-action="delete-cancel"]').click();
   await expect(dialog(page)).not.toHaveAttribute('open', '');
   expect(await page.locator('dc-family-row').count()).toBe(before);
+  // Delete them: both leave the list and the selection resets.
+  await bulk.click();
+  await typeWord(page, 'DELETE');
+  await page.locator('dc-delete-dialog [data-action="delete-go"]').click();
+  await expect(page.locator('dc-delete-dialog [data-delete="done"]')).toContainText('Deleted 2 layers.');
+  await page.locator('dc-delete-dialog [data-action="delete-close"]').click();
+  await expect.poll(() => page.locator('dc-family-row').count()).toBe(before - 2);
+  await expect(page.locator('[data-del-count]')).toContainText('Select the layers');
 });
-
 test('demo: every row has a visible Delete button that opens the dialog for that layer only', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/#/demo');

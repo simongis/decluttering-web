@@ -1,10 +1,12 @@
 import { LitElement, html, nothing, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { LocaleController } from '../../i18n/controller';
-import { t } from '../../i18n';
+import { formatNumber, t, tn } from '../../i18n';
 import '@esri/calcite-components/dist/components/calcite-block';
 import '@esri/calcite-components/dist/components/calcite-button';
 import '@esri/calcite-components/dist/components/calcite-chip';
+import '@esri/calcite-components/dist/components/calcite-checkbox';
+import '@esri/calcite-components/dist/components/calcite-label';
 import '@esri/calcite-components/dist/components/calcite-icon';
 import '@esri/calcite-components/dist/components/calcite-link';
 import '@esri/calcite-components/dist/components/calcite-notice';
@@ -17,7 +19,7 @@ import './dc-since-nudges';
 import '../scan/dc-dot-map';
 import type { DotModel } from '../scan/dots';
 import { readChartOpen, readChartView, reviewDots, writeChartOpen, writeChartView, zoneName, type ChartView } from './review-dots';
-import type { Data, EvaluateResult, Org, OwnerGroup, Thresholds } from '../../domain/types';
+import type { Data, EvaluateResult, Org, OwnerGroup, Row, Thresholds } from '../../domain/types';
 import { PRESETS, PRESET_NAMES, evaluate, matchPreset, sizeChangeImpact, statusToggles, sweepsOf, type PresetName, type SizeImpact } from '../../domain/stale';
 import { suggest, type Suggestion } from '../../domain/suggest';
 import { sweepNote, sweepSummary } from '../../domain/sweep';
@@ -68,6 +70,8 @@ export class DcReview extends LitElement {
   @property({ type: Boolean, attribute: 'can-see-usage' }) canSeeUsage = true;
   /** ADR 0016: whether the signed-in user may delete a layer owned by this username. Absent: the item panel offers no delete. */
   @property({ attribute: false }) canDelete: ((owner: string) => boolean) | undefined;
+  /** ADR 0016: the layers chosen for deleting. Its own choice, apart from the email ticks, so it works in every mode. */
+  @state() private delSel: ReadonlySet<string> = new Set();
   @property({ attribute: false }) thresholds: Thresholds = { ...PRESETS.balanced };
   /** False while maps and apps are still being read: used-by is unknown, so that rule is skipped. */
   @property({ type: Boolean }) depsKnown = true;
@@ -195,6 +199,11 @@ export class DcReview extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues): void {
+    if (changed.has('data') && this.delSel.size) {
+      const have = new Set((this.data?.services ?? []).map((s) => s.id));
+      const keep = [...this.delSel].filter((id) => have.has(id));
+      if (keep.length !== this.delSel.size) this.delSel = new Set(keep);
+    }
     if (changed.has('data') || changed.has('depsKnown') || changed.has('countSweeps')) this.applySuggestion();
     if (changed.has('data') || changed.has('thresholds') || changed.has('countSweeps') || changed.has('canSeeUsage') || changed.has('mode') || changed.has('memberUsername') || changed.has('depsKnown') || changed.has('adminUsername')) {
       this.ev = this.evaluateNow();
@@ -428,7 +437,7 @@ export class DcReview extends LitElement {
     const list = !everyone.length ? this.emptyState() : html`<dc-owner-list .owners=${owners} .org=${this.org} .thresholds=${this.thresholds}
       .items=${this.items} .done=${this.done} .filterOwner=${this.filterOwner} .sort=${this.activeSort} ?selectable=${this.selectable} ?member=${personal}
       .canSeeUsage=${this.canSeeUsage} .depsKnown=${this.depsKnown} .stopped=${this.stopped} .nudgeNotes=${this.nudgeNotes()}
-      .data=${this.data} .countSweeps=${this.countSweeps} .canDelete=${this.canDelete}></dc-owner-list>`;
+      .data=${this.data} .countSweeps=${this.countSweeps} .canDelete=${this.canDelete} .delSel=${this.delSel} @dc-delete-pick=${this.onDeletePick}></dc-owner-list>`;
     const startNone = this.startOnly && !owners.length && everyone.length > 0;
 
     const notes = [this.depsNote(), this.sizesNote(owners), this.useNote(), this.sweepNote()].filter((n) => n !== nothing);
@@ -459,10 +468,41 @@ export class DcReview extends LitElement {
           ${fo ? html`<calcite-chip closable scale="m" appearance="outline-fill" kind="brand" @calciteChipClose=${() => { this.filterOwner = null; }}>${t('review.label.owner', { name: fo.owner.fullName })}</calcite-chip>` : nothing}</div>
         ${everyone.length ? this.sortControl() : nothing}
         ${startNone ? html`<p class="lede">${t('review.sort.noneQuick')}</p>` : nothing}
+        ${this.deleteBar(filtered)}
         ${list}
         ${member ? nothing : this.unreachable(ev)}
       </div>
       ${member ? html`<aside class="mi-side" aria-label=${t('review.nudge.shareAria')}>${this.nudgePanel()}</aside>` : nothing}
+    </div>`;
+  }
+
+  /** ADR 0016: the rows on the list this user may delete. */
+  private deletableRows(shown: OwnerGroup[]): Row[] {
+    const can = this.canDelete;
+    return can ? shown.flatMap((o) => o.rows).filter((r) => can(r.source.owner)) : [];
+  }
+  private onDeletePick = (e: Event): void => {
+    e.stopPropagation();
+    const { id, checked } = (e as CustomEvent<{ id: string; checked: boolean }>).detail;
+    const next = new Set(this.delSel);
+    if (checked) next.add(id); else next.delete(id);
+    this.delSel = next;
+  };
+  /** ADR 0016: "Select all", how many are chosen and how much space they hold, and the Delete button. */
+  private deleteBar(shown: OwnerGroup[]) {
+    const rows = this.deletableRows(shown);
+    if (!rows.length) return nothing;
+    const chosen = rows.filter((r) => this.delSel.has(r.source.id));
+    const n = chosen.length, all = n === rows.length;
+    const known = chosen.filter((r) => r.sizeKnown);
+    const size = known.length ? ` · ${formatMB(known.reduce((s, r) => s + r.sizeMB, 0))}` : '';
+    return html`<div class="del-bar" data-bar="delete-select" role="region" aria-label=${t('review.delete.barLabel')}>
+      <calcite-label layout="inline" class="del-all"><calcite-checkbox data-action="del-all" .checked=${all} .indeterminate=${n > 0 && !all}
+        @calciteCheckboxChange=${(e: Event) => { this.delSel = (e.target as HTMLInputElement).checked ? new Set(rows.map((r) => r.source.id)) : new Set(); }}></calcite-checkbox>
+        ${t('review.delete.pickAll', { count: formatNumber(rows.length) })}</calcite-label>
+      <span class="del-sum" role="status" data-del-count>${n ? `${tn('review.delete.selected', n, { count: formatNumber(n) })}${size}` : t('review.delete.pickNone')}</span>
+      <calcite-button data-action="delete-selected" kind="danger" icon-start="trash" ?disabled=${n === 0}
+        @click=${() => this.dispatchEvent(new CustomEvent('dc-delete-request', { detail: { ids: chosen.map((r) => r.source.id) }, bubbles: true, composed: true }))}>${t('review.delete.bulk')}</calcite-button>
     </div>`;
   }
 

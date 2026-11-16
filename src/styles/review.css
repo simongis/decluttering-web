@@ -459,3 +459,9 @@ dc-item-panel calcite-panel { height: 100%; box-shadow: -8px 0 24px rgb(0 0 0 / 
 .dd-warn { color: var(--calcite-color-status-danger-text, var(--calcite-color-status-danger)); font-size: 0.8125rem; }
 .dd-total { margin-block: 0.5rem; font-weight: 500; }
 [data-note="delete-waiting"] { margin: 0.75rem 0 0; color: var(--calcite-color-text-3); font-size: 0.8125rem; }
+
+/* ADR 0016: the delete selection bar above the list, and each row's checkbox and button. */
+.del-bar { position: sticky; top: 0; z-index: 4; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin: 0.5rem 0; padding: 0.5rem 0.75rem; background: var(--calcite-color-foreground-1); border: 1px solid var(--calcite-color-border-2); border-inline-start: 4px solid var(--calcite-color-status-danger); border-radius: 4px; }
+.del-bar .del-sum { flex: 1 1 10rem; color: var(--calcite-color-text-2); font-size: 0.875rem; }
+.row-pick { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; font-size: 0.8125rem; }
+.row-pick > span { cursor: pointer; }

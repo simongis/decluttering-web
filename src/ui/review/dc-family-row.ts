@@ -25,7 +25,7 @@ const signOf = (r: Row): string =>
   [r.source.id, r.source.title, r.tidy ?? '', r.usedBy, r.sizeKnown, r.sizeMB, r.attachmentMB, r.credits, r.priority, r.priorityReason, r.views.map((v) => `${v.id}\u0001${v.title}`).join('\u0002')].join('\u0000');
 
 /** Clicks on these do their own thing; a click anywhere else on the row opens the item panel (DC-147c). */
-const OWN_CLICK = 'a, button, input, label, calcite-link, calcite-checkbox, calcite-label, calcite-chip, calcite-tooltip, .prio';
+const OWN_CLICK = 'a, button, input, label, .row-pick, calcite-button, calcite-link, calcite-checkbox, calcite-label, calcite-chip, calcite-tooltip, .prio';
 
 /** DC-147c: what `dc-item-open` carries: the row, the member clicked (source or a view) and the button that gets focus back. */
 export interface ItemOpenDetail { row: Row; member: string; opener: HTMLElement | null }
@@ -50,6 +50,8 @@ export class DcFamilyRow extends LitElement {
   @property({ type: Boolean }) done = false;
   /** ADR 0016: show a Delete button on the row (the user may delete this layer, and deleting is on). */
   @property({ type: Boolean }) deletable = false;
+  /** ADR 0016: this layer is chosen for deleting. */
+  @property({ type: Boolean, attribute: 'del-selected' }) delSelected = false;
   /** False while maps and apps are still being read: no used-by count, no "Tidy with care". */
   @property({ type: Boolean }) depsKnown = true;
   @property({ type: Boolean, attribute: 'show-usage' }) showUsage = true;
@@ -125,7 +127,9 @@ export class DcFamilyRow extends LitElement {
           <calcite-chip class="c-plain" scale="s" appearance="outline-fill" kind="neutral" data-size=${r.sizeKnown ? 'known' : 'unknown'} label=${saySize(r, this.stopped)}>${saySize(r, this.stopped)}</calcite-chip>
           ${r.sizeKnown ? html`<calcite-chip class="c-reclaim" scale="s" appearance="outline-fill" kind="neutral" label=${sayCredits(r)} title=${sayCredits(r)}><i class="sw reclaim"></i>≈ ${credit(r.credits)} ${t('review.fig.creditsMonth')}</calcite-chip>` : nothing}
           ${this.cue(r)}
-          ${this.deletable ? html`<calcite-button class="row-delete" data-action="delete-row" scale="s" kind="danger" appearance="outline" icon-start="trash" label=${t('review.delete.actionLabel', { title: s.title })}
+          ${this.deletable ? html`<span class="row-pick"><calcite-checkbox data-action="pick-delete" label=${t('review.delete.pickRowLabel', { title: s.title })} .checked=${this.delSelected}
+            @calciteCheckboxChange=${(e: Event) => this.dispatchEvent(new CustomEvent('dc-delete-pick', { detail: { id: s.id, checked: (e.target as HTMLInputElement).checked }, bubbles: true, composed: true }))}></calcite-checkbox><span aria-hidden="true" @click=${(e: Event) => { const cb = (e.currentTarget as HTMLElement).previousElementSibling as HTMLInputElement | null; cb?.click(); }}>${t('review.delete.pickRow')}</span></span>
+          <calcite-button class="row-delete" data-action="delete-row" scale="s" kind="danger" appearance="outline" icon-start="trash" label=${t('review.delete.actionLabel', { title: s.title })}
             @click=${() => this.dispatchEvent(new CustomEvent('dc-delete-request', { detail: { ids: [s.id] }, bubbles: true, composed: true }))}>${t('review.delete.action')}</calcite-button>` : nothing}
         </div>
         </div>
