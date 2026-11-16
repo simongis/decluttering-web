@@ -2,6 +2,9 @@ import type { Message } from '../en/core';
 import type { enShell } from '../en/shell';
 
 export const esShell: Record<keyof typeof enShell, Message> = {
+  'shell.version.title': 'Versión {version}, commit {commit}',
+  'shell.version.deleteOn': 'borrado activado',
+  'shell.version.deleteOff': 'borrado desactivado',
   'shell.scan.stopAndReview': 'Detener y revisar lo que tenemos',
   'shell.scan.stopScanning': 'Detener el análisis',
   'shell.scan.checkingBackground': 'El análisis sigue en segundo plano.',

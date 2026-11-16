@@ -476,6 +476,8 @@ export const esReview: Record<keyof typeof enReview, Message> = {
   'review.delete.reason.failed': 'ArcGIS Online la rechazó o no se pudo conectar.',
   'review.delete.partial': 'Se borraron algunas de sus vistas antes de parar.',
   'review.delete.close': 'Cerrar',
+  'review.delete.noPrivilege': 'Tu cuenta no puede borrar capas aquí: necesita el privilegio “Crear, actualizar y eliminar contenido”, o “Eliminar elementos” para las capas de otros.',
+  'review.delete.noneOnList': 'No hay capas en la lista con esta regla. Afloja la regla de la izquierda (por ejemplo, Estricto) para ver capas que seleccionar y borrar.',
   'review.delete.waiting': 'El borrado se activa cuando se han revisado los mapas y las apps, para que veas qué usa cada capa.',
   'review.delete.waitingStopped': 'El borrado está desactivado porque el análisis se paró antes de revisar todos los mapas y apps. Termina el análisis para activarlo.',
   'review.delete.unknownSize': 'tamaño sin medir',

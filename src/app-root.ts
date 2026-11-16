@@ -49,6 +49,8 @@ import { createSessionRemover } from './remove/session';
 import { pruneRemoved } from './remove/plan';
 import { createDemoRemover } from './demo/demo-remover';
 import type { ItemRemover } from './remove/remover';
+import { BUILD_COMMIT, FEATURE_VERSION } from './version';
+import { DELETING_MODE } from './auth/deleting';
 import { createSessionNudgeLog, type NudgeLog } from './log';
 import { PORTAL_URL } from './auth/config';
 import { autoStartReviewTour, closeReviewTour, openReviewTour } from './ui/tour';
@@ -855,7 +857,8 @@ export class AppRoot extends LitElement {
   private removerFor: { manager: ArcGISIdentityManager; scope: string; remover: ItemRemover } | null = null;
   private remover(): ItemRemover | null {
     const m = this.manager, a = this.access, scope = a?.deleteScope;
-    if (!m || !a || this.simulated || (scope !== 'all' && scope !== 'own')) return null;
+    if (!m || !a || (scope !== 'all' && scope !== 'own')) return null;
+    if (this.simulated) return (this.demoRemover ??= createDemoRemover(50)); // dev only: never touches anything
     if (this.removerFor?.manager === m && this.removerFor.scope === scope) return this.removerFor.remover;
     this.removerFor = { manager: m, scope, remover: createSessionRemover(m, { portal: PORTAL_URL, self: a.username, scope }) };
     return this.removerFor.remover;
@@ -955,7 +958,7 @@ export class AppRoot extends LitElement {
     return html`
       <calcite-shell @dc-selection-change=${(e: CustomEvent<{ owners: string[] }>) => { this.ticked = e.detail.owners.length; }}>
         <calcite-navigation slot="header" label=${t('shell.navigation.label')}>
-          <div slot="logo" class="dc-logo"><a class="dc-home" data-action="home" href=${hrefOf(homeRoute(this.route, this.signedIn))} aria-label=${t('shell.home.label')} @click=${this.goHome}><img src="${import.meta.env.BASE_URL}${this.consoleSkin ? 'brand-mark-console.svg' : 'brand-mark.svg'}" alt=""><span class="dc-name">Decluttering</span></a>${this.orgName ? html`<span class="dc-org">${this.orgName}</span>` : nothing}</div>
+          <div slot="logo" class="dc-logo"><a class="dc-home" data-action="home" href=${hrefOf(homeRoute(this.route, this.signedIn))} aria-label=${t('shell.home.label')} @click=${this.goHome}><img src="${import.meta.env.BASE_URL}${this.consoleSkin ? 'brand-mark-console.svg' : 'brand-mark.svg'}" alt=""><span class="dc-name">Decluttering</span></a>${this.orgName ? html`<span class="dc-org">${this.orgName}</span>` : nothing}<span class="dc-ver" data-version=${FEATURE_VERSION} title=${t('shell.version.title', { version: FEATURE_VERSION, commit: BUILD_COMMIT })}>v${FEATURE_VERSION} · ${BUILD_COMMIT} · ${t(DELETING_MODE === 'on' ? 'shell.version.deleteOn' : 'shell.version.deleteOff')}</span></div>
           <calcite-button slot="content-end" class="dc-about-link" data-action="about" appearance="transparent" kind="neutral" icon-start="information"
             href=${hrefOf('about')} label=${t('shell.about.label')} ?active=${this.route === 'about'}>${this.narrow ? nothing : t('shell.about.button')}</calcite-button>
           <button type="button" role="switch" slot="content-end" class="dc-skin-toggle" data-action="skin-toggle" aria-checked=${this.consoleSkin ? 'true' : 'false'}

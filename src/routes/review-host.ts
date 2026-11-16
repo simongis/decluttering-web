@@ -2,7 +2,7 @@
 import { LitElement, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { AccessMode } from '../auth/access';
-import { mayDelete, type DeleteScope } from '../auth/deleting';
+import { DELETING_MODE, mayDelete, type DeleteScope } from '../auth/deleting';
 import { familiesToRemove, type RemovalCandidate } from '../remove/plan';
 import type { ItemRemover } from '../remove/remover';
 import type { Data, OwnerGroup, Thresholds } from '../domain/types';
@@ -12,6 +12,7 @@ import '../ui/review/index';
 import type { SelectionDetail } from '../ui/review/index';
 import '../ui/review/dc-broken-refs';
 import '../ui/review/dc-delete-dialog';
+import type { DeleteStatus } from '../ui/review/dc-review';
 import '../ui/sankey/dc-sankey';
 import '@esri/calcite-components/dist/components/calcite-button';
 import '@esri/calcite-components/dist/components/calcite-dialog';
@@ -177,6 +178,14 @@ export class AppReview extends LitElement {
 
   /** The user may delete in principle (build, privileges, a remover). */
   private get mayDeleteAtAll(): boolean { return !!this.remover && (this.deleteScope === 'all' || this.deleteScope === 'own'); }
+  /** What the delete bar says: hidden when the build has deleting off, else why it can or can't be used yet. */
+  private get deleteStatus(): DeleteStatus {
+    if (!this.remover && DELETING_MODE !== 'on') return 'off';
+    if (!this.mayDeleteAtAll) return 'no-privilege';
+    if (this.stopped) return 'stopped';
+    if (!this.depsKnown || this.refreshing) return 'waiting';
+    return 'ready';
+  }
   /**
    * Deleting waits for a finished scan: while maps and apps are still being read (or the scan was stopped), "used by" is unreliable,
    * and a layer that looks unused might not be (ADR 0007, ADR 0016).
@@ -229,7 +238,7 @@ export class AppReview extends LitElement {
     const owners = this.mode === 'my-items' ? [] : this.sankeyOwners(data, counting);
     return html`
       <section data-page="review" data-mode=${this.mode} data-deps-known=${String(this.depsKnown)}>
-        <dc-review .data=${data} .org=${data.org} .canDelete=${this.deleting ? this.canDelete : undefined} @dc-delete-request=${this.onDeleteRequest} .countSweeps=${counting} .since=${this.since(data, counting)}
+        <dc-review .data=${data} .org=${data.org} .deleteStatus=${this.deleteStatus} .canDelete=${this.deleting ? this.canDelete : undefined} @dc-delete-request=${this.onDeleteRequest} .countSweeps=${counting} .since=${this.since(data, counting)}
           @dc-count-sweeps=${(e: CustomEvent<boolean>) => setCountSweeps(data.org.id, e.detail)} .mode=${this.mode} .depsKnown=${this.depsKnown} .stopped=${this.stopped} .canSeeUsage=${this.canSeeUsage} .memberUsername=${this.username} .adminUsername=${this.mode === 'my-items' ? '' : this.username}
           @dc-thresholds-change=${(e: CustomEvent<Thresholds>) => { this.thresholds = e.detail; }}
           @dc-owner-select=${this.onSelect} @dc-selection-change=${this.onSelection}>
@@ -243,7 +252,6 @@ export class AppReview extends LitElement {
         <dc-broken-refs .refs=${visibleBrokenRefs(data, { depsComplete: this.depsKnown && !this.stopped, mode: this.mode })} .org=${data.org} .owners=${data.owners}></dc-broken-refs>
         ${this.rescanDialog()}
         ${this.deleteDialog()}
-        ${this.mayDeleteAtAll && !this.deleting ? html`<p role="note" data-note="delete-waiting">${t(this.stopped ? 'review.delete.waitingStopped' : 'review.delete.waiting')}</p>` : nothing}
         ${this.actionBar()}
       </section>`;
   }

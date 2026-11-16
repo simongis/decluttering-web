@@ -32,6 +32,8 @@ import { noOneToNudge } from '../../domain/solo';
 
 export type ReviewMode = 'admin' | 'admin-cant-send' | 'my-items';
 /** `solo` (DC-103): every owner the rule flags is the signed-in admin, so there is no one to nudge and no Emails step. */
+/** ADR 0016: what the delete bar shows. `off`: the build has deleting off, no bar. */
+export type DeleteStatus = 'off' | 'no-privilege' | 'waiting' | 'stopped' | 'ready';
 export interface SelectionDetail { owners: string[]; items: string[]; services: number; credits: number; solo?: boolean }
 
 const DONE_KEY = 'decluttering:done';
@@ -72,6 +74,7 @@ export class DcReview extends LitElement {
   @property({ attribute: false }) canDelete: ((owner: string) => boolean) | undefined;
   /** ADR 0016: the layers chosen for deleting. Its own choice, apart from the email ticks, so it works in every mode. */
   @state() private delSel: ReadonlySet<string> = new Set();
+  @property() deleteStatus: DeleteStatus = 'off';
   @property({ attribute: false }) thresholds: Thresholds = { ...PRESETS.balanced };
   /** False while maps and apps are still being read: used-by is unknown, so that rule is skipped. */
   @property({ type: Boolean }) depsKnown = true;
@@ -490,14 +493,21 @@ export class DcReview extends LitElement {
   };
   /** ADR 0016: "Select all", how many are chosen and how much space they hold, and the Delete button. */
   private deleteBar(shown: OwnerGroup[]) {
-    const rows = this.deletableRows(shown);
-    if (!rows.length) return nothing;
+    const st = this.deleteStatus;
+    if (st === 'off') return nothing;
+    const rows = st === 'ready' ? this.deletableRows(shown) : [];
+    const head = html`<span class="del-title"><calcite-icon icon="trash" scale="s" aria-hidden="true"></calcite-icon>${t('review.delete.barLabel')}</span>`;
+    if (!rows.length) {
+      const why = st === 'no-privilege' ? 'review.delete.noPrivilege' : st === 'stopped' ? 'review.delete.waitingStopped' : st === 'waiting' ? 'review.delete.waiting' : 'review.delete.noneOnList';
+      return html`<div class="del-bar" data-bar="delete-select" data-delete-status=${st} role="region" aria-label=${t('review.delete.barLabel')}>
+        ${head}<span class="del-sum" role="status" data-del-why>${t(why)}</span></div>`;
+    }
     const chosen = rows.filter((r) => this.delSel.has(r.source.id));
     const n = chosen.length, all = n === rows.length;
     const known = chosen.filter((r) => r.sizeKnown);
     const size = known.length ? ` · ${formatMB(known.reduce((s, r) => s + r.sizeMB, 0))}` : '';
-    return html`<div class="del-bar" data-bar="delete-select" role="region" aria-label=${t('review.delete.barLabel')}>
-      <calcite-label layout="inline" class="del-all"><calcite-checkbox data-action="del-all" .checked=${all} .indeterminate=${n > 0 && !all}
+    return html`<div class="del-bar" data-bar="delete-select" data-delete-status="ready" role="region" aria-label=${t('review.delete.barLabel')}>
+      ${head}<calcite-label layout="inline" class="del-all"><calcite-checkbox data-action="del-all" .checked=${all} .indeterminate=${n > 0 && !all}
         @calciteCheckboxChange=${(e: Event) => { this.delSel = (e.target as HTMLInputElement).checked ? new Set(rows.map((r) => r.source.id)) : new Set(); }}></calcite-checkbox>
         ${t('review.delete.pickAll', { count: formatNumber(rows.length) })}</calcite-label>
       <span class="del-sum" role="status" data-del-count>${n ? `${tn('review.delete.selected', n, { count: formatNumber(n) })}${size}` : t('review.delete.pickNone')}</span>

@@ -475,6 +475,8 @@ export const enReview = {
   'review.delete.reason.failed': 'ArcGIS Online refused or couldn’t be reached.',
   'review.delete.partial': 'Some of its views were deleted before this stopped.',
   'review.delete.close': 'Close',
+  'review.delete.noPrivilege': 'Your account can’t delete layers here: it needs the “Create, update and delete content” privilege, or “Delete items” for other people’s layers.',
+  'review.delete.noneOnList': 'No layers on the list with this rule. Loosen the rule on the left (for example Strict) to see layers you can select and delete.',
   'review.delete.waiting': 'Deleting opens once maps and apps have been checked, so you can see what uses each layer.',
   'review.delete.waitingStopped': 'Deleting is off because the scan was stopped before maps and apps were all checked. Finish the scan to turn it on.',
   'review.delete.unknownSize': 'size not measured',

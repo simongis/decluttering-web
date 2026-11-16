@@ -1,6 +1,9 @@
 import type { Message } from './core';
 
 export const enShell = {
+  'shell.version.title': 'Version {version}, commit {commit}',
+  'shell.version.deleteOn': 'deleting on',
+  'shell.version.deleteOff': 'deleting off',
   'shell.scan.stopAndReview': 'Stop and review what we have',
   'shell.scan.stopScanning': 'Stop scanning',
   'shell.scan.checkingBackground': 'Still checking in the background.',

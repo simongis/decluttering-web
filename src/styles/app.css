@@ -87,3 +87,7 @@ calcite-shell > calcite-navigation[slot="header"] {
 .dc-skin-toggle:hover .dc-skin-track { box-shadow: inset 0 0 0 1px var(--calcite-color-border-3); }
 .dc-skin-toggle[aria-checked="true"] .dc-skin-knob { transform: translateX(20px); }
 @media (prefers-reduced-motion: reduce) { .dc-skin-knob { transition: none; } }
+
+/* The version line in the header (src/version.ts). */
+.dc-logo .dc-ver { margin-inline-start: 0.6rem; padding: 0.1rem 0.45rem; border-radius: 999px; background: var(--calcite-color-foreground-2); color: var(--calcite-color-text-2); font-size: 0.75rem; white-space: nowrap; }
+@media (max-width: 600px) { .dc-logo .dc-ver { display: none; } }

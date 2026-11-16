@@ -39,7 +39,7 @@ export function startSimulation(p: SimulateParams): Simulation {
   const org = createSimulatedOrg(p.config);
   const access: AccessInfo = {
     mode: 'admin', username: 'sim_admin', fullName: 'Sim Admin', orgName: org.config.orgName, orgId: org.config.orgId,
-    role: 'org_admin', usageReadable: true, writable: true,
+    role: 'org_admin', usageReadable: true, writable: true, deleteScope: 'all',
   };
   (window as unknown as { __sim?: unknown }).__sim = { config: org.config, stats: org.stats, services: org.world.services.length, maps: org.world.maps.length, owners: org.world.owners.length };
   return { org, access };

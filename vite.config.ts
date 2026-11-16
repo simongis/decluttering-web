@@ -1,4 +1,14 @@
 import { loadEnv, type Plugin } from 'vite';
+import { execSync } from 'node:child_process';
+
+/** The short commit and "+" when there are uncommitted changes, for the header's version line. "unknown" outside git. */
+export function gitCommit(): string {
+  try {
+    const sha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    const dirty = execSync('git status --porcelain', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() !== '';
+    return sha + (dirty ? '+' : '');
+  } catch { return 'unknown'; }
+}
 import { defineConfig } from 'vitest/config';
 
 const BEACON_SRC = 'https://static.cloudflareinsights.com/beacon.min.js';
@@ -57,6 +67,7 @@ export default defineConfig(({ mode }) => {
   const env = { ...loadEnv(mode, process.cwd(), 'VITE_'), ...process.env };
   return {
     base: process.env.BASE_PATH || '/',
+    define: { __DC_COMMIT__: JSON.stringify(gitCommit()) },
     plugins: [cspPlugin(env.VITE_ARCGIS_PORTAL_URL), ...beaconPlugins(mode, env)],
     test: { include: ['src/**/*.test.ts', 'tests/**/*.test.ts', 'vite.config.test.ts'] },
   };
