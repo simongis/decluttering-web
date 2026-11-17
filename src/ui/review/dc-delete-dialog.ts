@@ -15,6 +15,7 @@ import { formatNumber, t, tn, type MessageKey } from '../../i18n';
 import { LocaleController } from '../../i18n/controller';
 import type { ItemRemover, RemoveOutcome } from '../../remove/remover';
 import type { RemovalCandidate } from '../../remove/plan';
+import { deleteReportCsv, reportFileName } from '../../remove/report';
 
 type Phase = 'confirm' | 'working' | 'done';
 export interface ItemsRemovedDetail { ids: string[] }
@@ -30,6 +31,10 @@ export class DcDeleteDialog extends LitElement {
   /** The signed-in username, named in the dialog so it is clear whose account does the delete. */
   @property() user = '';
   @property({ attribute: false }) remover: ItemRemover | null = null;
+  /** The org's name, for the report. */
+  @property() org = '';
+  /** The layers and the time of the run that finished, for the report (the host's `items` change as the list updates). */
+  private ran: { items: RemovalCandidate[]; at: Date } | null = null;
   @state() private phase: Phase = 'confirm';
   @state() private typed = '';
   @state() private progress = { done: 0, total: 0 };
@@ -67,6 +72,7 @@ export class DcDeleteDialog extends LitElement {
       out = items.map((i) => ({ id: i.id, ok: false as const, reason: 'failed' as const, message: e instanceof Error ? e.message : String(e), removed: [] }));
     }
     this.ctl = null;
+    this.ran = { items, at: new Date() };
     this.outcomes = out;
     this.phase = 'done';
     const ids = out.flatMap((o) => o.removed);
@@ -74,6 +80,19 @@ export class DcDeleteDialog extends LitElement {
   };
 
   private stop = (): void => { this.ctl?.abort(); };
+
+  /** ADR 0016: the run as CSV, saved by the browser. Nothing is sent anywhere. */
+  private download = (): void => {
+    const r = this.ran;
+    if (!r) return;
+    const csv = deleteReportCsv(r.items, this.outcomes, { at: r.at, by: this.user, org: this.org });
+    const url = URL.createObjectURL(new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' })); // BOM: Excel reads the accents
+    const a = document.createElement('a');
+    a.href = url; a.download = reportFileName(r.at); a.hidden = true;
+    // Inside the dialog: a modal makes the rest of the page inert, and a click on an inert link does nothing.
+    (this.querySelector('calcite-dialog') ?? document.body).append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
 
   private row(c: RemovalCandidate) {
     const size = c.sizeMB === null ? t('review.delete.unknownSize') : formatMB(c.sizeMB);
@@ -111,7 +130,7 @@ export class DcDeleteDialog extends LitElement {
   }
 
   private done() {
-    const byId = new Map(this.items.map((i) => [i.id, i]));
+    const byId = new Map((this.ran?.items ?? this.items).map((i) => [i.id, i]));
     const ok = this.outcomes.filter((o) => o.ok);
     const bad = this.outcomes.filter((o) => !o.ok);
     const freed = ok.reduce((s, o) => s + (byId.get(o.id)?.sizeMB ?? 0), 0);
@@ -128,6 +147,8 @@ export class DcDeleteDialog extends LitElement {
           return html`<li data-delete-failed=${o.id}><b>${c?.title ?? o.id}</b> <span class="dd-meta">${reason}${o.removed.length ? ` ${t('review.delete.partial')}` : ''}</span>
             ${!o.ok && o.message && o.reason === 'failed' ? html`<span class="dd-meta">${o.message}</span>` : nothing}</li>`;
         })}</ul></div></calcite-notice>` : nothing}
+      <p class="dd-meta" data-delete="report-hint">${t('review.delete.reportHint')}</p>
+      <calcite-button slot="footer-start" appearance="outline" kind="neutral" icon-start="download" data-action="delete-report" @click=${this.download}>${t('review.delete.report')}</calcite-button>
       <calcite-button slot="footer-end" data-action="delete-close" @click=${() => this.emitClose()}>${t('review.delete.close')}</calcite-button>`;
   }
 

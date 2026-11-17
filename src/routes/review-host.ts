@@ -206,7 +206,7 @@ export class AppReview extends LitElement {
   private onDeleteRequest = (e: Event): void => { e.stopPropagation(); this.askDelete((e as CustomEvent<{ ids: string[] }>).detail.ids); };
   private deleteDialog() {
     if (!this.deleting) return nothing;
-    return html`<dc-delete-dialog .open=${this.del.open} .items=${this.del.items} .leftOut=${this.del.leftOut} .user=${this.username} .remover=${this.remover}
+    return html`<dc-delete-dialog .open=${this.del.open} .items=${this.del.items} .leftOut=${this.del.leftOut} .user=${this.username} .org=${this.data.org.name} .remover=${this.remover}
       @dc-delete-unpick=${this.onUnpick} @dc-delete-close=${() => { this.del = { ...this.del, open: false }; }}></dc-delete-dialog>`;
   }
   /** The action bar (admin only): what's ticked, and "Next: write the emails". */

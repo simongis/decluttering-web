@@ -477,6 +477,8 @@ export const esReview: Record<keyof typeof enReview, Message> = {
   'review.delete.partial': 'Se borraron algunas de sus vistas antes de parar.',
   'review.delete.close': 'Cerrar',
   'review.delete.clear': 'Quitar la selección',
+  'review.delete.report': 'Descargar informe (CSV)',
+  'review.delete.reportHint': 'ArcGIS Online no avisa a los propietarios cuando se borran sus capas, y esta app no guarda registro. Descarga el informe para conservar uno o para avisar a los propietarios.',
   'review.delete.unpick': 'Quitar',
   'review.delete.unpickLabel': 'Quitar {title} de este borrado',
   'review.delete.rect.added': { one: 'El rectángulo ha agregado {count} capa.', other: 'El rectángulo ha agregado {count} capas.' },

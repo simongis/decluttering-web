@@ -158,8 +158,8 @@ Some layers are better gone: old copies, abandoned projects, layers that take a 
 
 ### Choosing what to delete
 
-- **On the chart:** drag a rectangle over the dots. Every layer inside it is added to the delete selection, **whether or not it meets the rule**. The chart shows all your layers; the list only shows those the rule picks out. Each rectangle adds to the selection. Selected layers get a red ring.
-- **Click a dot** to choose **View item** (opens it in ArcGIS Online, in a new tab) or **Delete…** (just that layer). From the keyboard: arrow keys move between dots, Enter opens the same choice, Escape closes it.
+- **On the chart:** drag a rectangle over the dots. Every layer inside it is added to the delete selection, **whether or not it meets the rule**. The chart shows all your layers; the list only shows those the rule picks out. Each rectangle adds to the selection and says how many it added, and how many it left out because you can't delete them. Selected layers get a red ring.
+- **Click a dot** to choose **View item** (opens it in ArcGIS Online, in a new tab), **Add to / Remove from selection**, or **Delete…** (just that layer). From the keyboard: arrow keys move between dots, Enter opens the same choice, Escape closes it.
 - **On the list:** every layer row has **Select to delete** and a **Delete…** button. The bar above the list has **Select all**, the number of layers and the storage selected (and how many are outside the list), **Clear selection** and **Delete selected…**. The same count and buttons sit right above the chart.
 - **In a layer's panel:** **Delete…**.
 
@@ -169,7 +169,7 @@ The delete selection is separate from the email ticks, so it works for every acc
 
 ![The confirm dialog: each layer with its owner and size, a warning when a map uses it, the storage it frees, and the word to type](docs/images/delete-dialog.png)
 
-- **Confirmed every time.** The dialog lists each layer with its owner, size and views (they are deleted with it), warns when a map or app still uses it, names the account doing the delete, and asks you to type `DELETE` (`BORRAR` in Spanish).
+- **Confirmed every time.** The dialog lists each layer with its owner, size and views (they are deleted with it), lets you **Remove** any of them from this delete, warns when a map or app still uses it, names the account doing the delete, and asks you to type `DELETE` (`BORRAR` in Spanish).
 - **Never permanent.** The app sends a normal delete, never `permanentDelete`, so the ArcGIS Online recycle bin applies where the org has one. Layers with delete protection are skipped and reported.
 - **Checked first.** Just before deleting, the app reads each layer again and skips it if it is no longer a hosted feature layer, has a different owner, or is protected. A delete counts only when ArcGIS Online confirms it.
 - **Only on a finished scan.** Selecting and deleting switch on once maps and apps have been checked, so "used by" can be trusted. Until then the delete bar says why it is waiting.
@@ -177,6 +177,8 @@ The delete selection is separate from the email ticks, so it works for every acc
 - **Its own allow-list.** Deleting can make only two calls, an item read and the delete (`src/remove/guard.ts`). The scan stays read-only.
 
 After a delete, the layers leave the list, the chart and the saved scan. Maps and apps that used a deleted layer are checked again on your next scan.
+
+**Keep a record.** ArcGIS Online doesn't tell owners when an admin deletes their layers, and the app keeps no record (it has no server). The result has **Download report (CSV)**: one row per layer with when, who, the owner, size, views, the result and the reason when it wasn't deleted. Use it to keep a record or to tell the owners. Text that a spreadsheet would run as a formula is defused.
 
 The demo shows the whole flow without touching anything. The design is in [ADR 0016](docs/adr/0016-deleting-layers.md), and a manual test plan for a real org is in [docs/testing/deleting.md](docs/testing/deleting.md).
 

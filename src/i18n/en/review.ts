@@ -476,6 +476,8 @@ export const enReview = {
   'review.delete.partial': 'Some of its views were deleted before this stopped.',
   'review.delete.close': 'Close',
   'review.delete.clear': 'Clear selection',
+  'review.delete.report': 'Download report (CSV)',
+  'review.delete.reportHint': 'ArcGIS Online doesn’t tell owners when their layers are deleted, and this app keeps no record. Download the report to keep one, or to let the owners know.',
   'review.delete.unpick': 'Remove',
   'review.delete.unpickLabel': 'Remove {title} from this delete',
   'review.delete.rect.added': { one: 'The rectangle added {count} layer.', other: 'The rectangle added {count} layers.' },

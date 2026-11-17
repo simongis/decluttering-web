@@ -235,3 +235,29 @@ test('demo: Remove in the confirm dialog takes a layer out of the delete and out
   await page.locator('dc-delete-dialog [data-action="delete-cancel"]').click();
   await expect(page.locator('[data-del-count]')).toContainText('1 layer selected');
 });
+
+test('demo: after a delete, the report downloads as CSV with one row per layer and its result', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/#/demo');
+  await reviewReady(page);
+  const picks = page.locator('dc-family-row [data-action="pick-delete"]');
+  await picks.nth(0).click();
+  await picks.nth(1).click();
+  await page.locator('[data-action="delete-selected"]').click();
+  const titles = (await page.locator('dc-delete-dialog [data-delete-item] b').allInnerTexts()).map((s) => s.trim());
+  await typeWord(page, 'DELETE');
+  await page.locator('dc-delete-dialog [data-action="delete-go"]').click();
+  await expect(page.locator('dc-delete-dialog [data-delete="done"]')).toContainText('Deleted 2 layers.');
+  await expect(page.locator('dc-delete-dialog [data-delete="report-hint"]')).toBeVisible();
+  const [file] = await Promise.all([page.waitForEvent('download'), page.locator('dc-delete-dialog [data-action="delete-report"]').click()]);
+  expect(file.suggestedFilename()).toMatch(/^decluttering-deletes-\d{4}-\d{2}-\d{2}-\d{4}\.csv$/);
+  const text = (await (await import('node:fs/promises')).readFile(await file.path(), 'utf8')).replace(/^\ufeff/, '');
+  const lines = text.trim().split(/\r\n/);
+  expect(lines[0]).toBe('deleted_at,org,deleted_by,item_id,title,owner,size_mb,views,used_by_maps_apps,result,reason,removed_ids,message');
+  expect(lines).toHaveLength(3);
+  for (const [i, title] of titles.entries()) {
+    expect(lines[i + 1]).toContain(title.includes(',') ? `"${title}"` : title);
+    expect(lines[i + 1]).toContain(',deleted,');
+    expect(lines[i + 1]).toContain(',demo_admin,');
+  }
+});
