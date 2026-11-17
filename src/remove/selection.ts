@@ -11,10 +11,12 @@ export interface RectResult {
   added: number;
   /** Inside the rectangle, but this user may not delete them, so left out. */
   dropped: number;
+  /** Layers in the rectangle's area that the chart does not draw (small layers) and are not selected yet: offered, not taken. */
+  hidden: string[];
 }
 
 /** Adds the deletable ids to the selection. Never removes anything. */
-export function addPicked(sel: ReadonlySet<string>, ids: readonly string[], deletable: { has(id: string): boolean }): RectResult {
+export function addPicked(sel: ReadonlySet<string>, ids: readonly string[], deletable: { has(id: string): boolean }, hiddenIds: readonly string[] = []): RectResult {
   const next = new Set(sel);
   const seen = new Set<string>();
   let added = 0, dropped = 0;
@@ -24,7 +26,8 @@ export function addPicked(sel: ReadonlySet<string>, ids: readonly string[], dele
     if (!deletable.has(id)) { dropped++; continue; }
     if (!next.has(id)) { next.add(id); added++; }
   }
-  return { next, inRect: seen.size, added, dropped };
+  const hidden = [...new Set(hiddenIds)].filter((id) => !seen.has(id) && deletable.has(id) && !next.has(id));
+  return { next, inRect: seen.size, added, dropped, hidden };
 }
 
 /** One layer in or out. Adding is refused (the same set back) when the user may not delete it. */

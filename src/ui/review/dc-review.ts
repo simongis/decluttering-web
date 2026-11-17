@@ -19,6 +19,7 @@ import './dc-owner-list';
 import './dc-since-nudges';
 import '../scan/dc-dot-map';
 import type { DotModel } from '../scan/dots';
+import { SMALL_LAYER_MB } from '../scan/dots';
 import { readChartOpen, readChartView, reviewDots, writeChartOpen, writeChartView, zoneName, type ChartView } from './review-dots';
 import type { Data, EvaluateResult, Org, OwnerGroup, Row, Service, Thresholds } from '../../domain/types';
 import { PRESETS, PRESET_NAMES, evaluate, matchPreset, sizeChangeImpact, statusToggles, sweepsOf, type PresetName, type SizeImpact } from '../../domain/stale';
@@ -513,8 +514,9 @@ export class DcReview extends LitElement {
   private onDotsSelect = (e: Event): void => {
     e.stopPropagation();
     if (this.deleteStatus !== 'ready') return;
-    const r = addPicked(this.delSel, (e as CustomEvent<{ ids: string[] }>).detail.ids, this.deletableById());
-    this.rectNote = r.inRect ? { inRect: r.inRect, added: r.added, dropped: r.dropped } : null;
+    const det = (e as CustomEvent<{ ids: string[]; hidden?: string[] }>).detail;
+    const r = addPicked(this.delSel, det.ids, this.deletableById(), det.hidden ?? []);
+    this.rectNote = r.inRect || r.hidden.length ? { inRect: r.inRect, added: r.added, dropped: r.dropped, hidden: r.hidden } : null;
     if (r.added) this.delSel = r.next;
   };
   private rectLine() {
@@ -522,10 +524,20 @@ export class DcReview extends LitElement {
     const r = this.rectNote;
     if (!r) return html`<span class="chart-sel-note" data-rect-note></span>`;
     const parts = [
-      r.added ? tn('review.delete.rect.added', r.added, { count: formatNumber(r.added) }) : r.dropped ? t('review.delete.rect.none') : t('review.delete.rect.already'),
+      r.added ? tn('review.delete.rect.added', r.added, { count: formatNumber(r.added) }) : r.dropped ? t('review.delete.rect.none') : r.inRect ? t('review.delete.rect.already') : '',
       r.dropped ? tn('review.delete.rect.dropped', r.dropped, { count: formatNumber(r.dropped) }) : '',
     ].filter(Boolean).join(' ');
-    return html`<span class="chart-sel-note ${r.dropped ? 'warn' : ''}" data-rect-note>${parts}</span>`;
+    const h = r.hidden.length;
+    return html`<span class="chart-sel-note ${r.dropped ? 'warn' : ''}" data-rect-note>${parts}${h ? html`${parts ? ' ' : ''}<span data-rect-hidden>${tn('review.delete.rect.hidden', h, { count: formatNumber(h), mb: SMALL_LAYER_MB })}</span>
+      <button type="button" class="dm-link" data-action="rect-include-hidden" @click=${this.includeHidden}>${tn('review.delete.rect.includeHidden', h, { count: formatNumber(h) })}</button>` : nothing}</span>`;
+  }
+  /** Adds the small layers the last rectangle covered but the chart doesn't draw. */
+  private includeHidden = (): void => {
+    const r = this.rectNote;
+    if (!r?.hidden.length) return;
+    const add = addPicked(this.delSel, r.hidden, this.deletableById());
+    this.delSel = add.next;
+    this.rectNote = { ...r, added: r.added + add.added, hidden: [] };
   }
   /** ADR 0016: right under the chart, so a rectangle's result is seen where it was drawn: the count, Clear and Delete selected. */
   private chartSelection() {

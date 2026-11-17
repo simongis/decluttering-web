@@ -474,3 +474,4 @@ dc-item-panel calcite-panel { height: 100%; box-shadow: -8px 0 24px rgb(0 0 0 / 
 .dd-list li:has(.dd-unpick) { position: relative; padding-inline-end: 4.5rem; }
 .dd-unpick { position: absolute; inset-inline-end: 0; top: 0; padding: 0.15rem 0.5rem; font: inherit; font-size: 0.8125rem; cursor: pointer; border: 1px solid var(--calcite-color-border-1); border-radius: 3px; background: var(--calcite-color-foreground-1); color: var(--calcite-color-text-2); }
 .dd-unpick:hover, .dd-unpick:focus-visible { background: var(--calcite-color-foreground-2); outline: 2px solid var(--calcite-color-brand); outline-offset: 1px; }
+.chart-sel-note .dm-link { margin-inline-start: 0.35rem; padding: 0; border: 0; background: none; font: inherit; font-weight: 600; color: var(--calcite-color-text-link, #1b6ea8); text-decoration: underline; cursor: pointer; }

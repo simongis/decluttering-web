@@ -486,6 +486,8 @@ export const esReview: Record<keyof typeof enReview, Message> = {
   'review.delete.rect.added': { one: 'El rectángulo ha agregado {count} capa.', other: 'El rectángulo ha agregado {count} capas.' },
   'review.delete.rect.already': 'Todo lo del rectángulo ya estaba seleccionado.',
   'review.delete.rect.none': 'En ese rectángulo no hay nada que puedas borrar.',
+  'review.delete.rect.hidden': { one: '{count} capa de menos de {mb} MB en esta zona no se dibuja en la gráfica.', other: '{count} capas de menos de {mb} MB en esta zona no se dibujan en la gráfica.' },
+  'review.delete.rect.includeHidden': { one: 'Incluirla', other: 'Incluirlas' },
   'review.delete.rect.dropped': { one: '{count} se deja fuera: no puedes borrarla.', other: '{count} se dejan fuera: no puedes borrarlas.' },
   'review.delete.noneSelected': 'Todavía no hay capas seleccionadas para borrar.',
   'review.delete.offList': { one: '{count} fuera de la lista (no cumple la regla)', other: '{count} fuera de la lista (no cumplen la regla)' },

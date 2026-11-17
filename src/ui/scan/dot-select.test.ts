@@ -24,6 +24,12 @@ describe('dot rectangle selection', () => {
   it('an empty area picks nothing', () => {
     expect(idsInRect(dots, { x0: 60, y0: 0, x1: 80, y1: 20 })).toEqual([]);
   });
+  it('a drawn dot counts when any of it is inside, so the dot a drag starts on is taken', () => {
+    const big = [{ id: 'p', x: 100, y: 100, drawn: true, r: 6 }, { id: 'q', x: 120, y: 100, drawn: true, r: 6 }];
+    expect(idsInRect(big, { x0: 104, y0: 96, x1: 112, y1: 104 })).toEqual(['p']); // p touched by its edge; q is 8 px away
+    expect(idsInRect(big, { x0: 100.6, y0: 100.6, x1: 140, y1: 140 })).toEqual(['p', 'q']); // started a pixel off p's centre
+    expect(idsInRect(big, { x0: 107, y0: 107, x1: 113, y1: 113 })).toEqual([]); // the box's corner is clear of both circles
+  });
   it('a press only becomes a drag past the threshold', () => {
     expect(isDrag({ x0: 0, y0: 0, x1: 3, y1: 3 })).toBe(false);
     expect(isDrag({ x0: 0, y0: 0, x1: 4, y1: 0 })).toBe(true);

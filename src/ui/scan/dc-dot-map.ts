@@ -611,11 +611,28 @@ export class DcDotMap extends LitElement {
     this.drag = null; this.dragging = false;
     if (!d || !was || e.pointerId !== d.pointer) return;
     this.eatClick = true; setTimeout(() => { this.eatClick = false; }, 0);
-    const ids = idsInRect(this.sprites.map((s) => ({ id: s.id, x: s.x, y: s.y, drawn: s.rad > 0 || !!s.shade, view: s.view })), d);
-    this.dispatchEvent(new CustomEvent<{ ids: string[] }>('dc-dots-select', { detail: { ids }, bubbles: true, composed: true }));
+    // A shaded dot is a cell of the shading: about 3 px across.
+    const ids = idsInRect(this.sprites.map((s) => ({ id: s.id, x: s.x, y: s.y, drawn: s.rad > 0 || !!s.shade, view: s.view, r: s.rad || (s.shade ? 1.5 : 0) })), d);
+    const hidden = this.hiddenInRect(d);
+    this.dispatchEvent(new CustomEvent<{ ids: string[]; hidden: string[] }>('dc-dots-select', { detail: { ids, hidden }, bubbles: true, composed: true }));
     this.srLive.textContent = tn('scan.map.select.done', ids.length, { count: fmtInt(ids.length) });
     this.kick();
   };
+  /**
+   * The layers left off the chart by the small-layer floor (SMALL_LAYER_MB, "show them" off) whose place on How stale is
+   * inside the rectangle. They are not drawn, so the rectangle can't take them; the host says how many and offers them.
+   * Same layout as a drawn dot (lensPoint with the dot's seed), so "inside" means where it would be drawn.
+   */
+  private hiddenInRect(rect: DragRect): string[] {
+    const m = this.shown;
+    if (!m.revealed || this.lens !== 'stale') return [];
+    const drawn = new Set(this.sprites.map((s) => s.id));
+    const pts = this.model.dots.filter((d) => !drawn.has(d.id) && !d.view).map((d) => {
+      const [nx, ny] = lensPoint(this.lens, d, seedOf(d.id), this.thresholds, m.maxSizeMB, this.yScale);
+      return { id: d.id, x: this.plotX(nx), y: this.plotY(ny), drawn: true };
+    });
+    return idsInRect(pts, rect);
+  }
   private onCancel = (): void => { this.drag = null; this.dragging = false; this.kick(); };
   private creditsText(c: number): string { return c >= 0.05 ? translate('scan.map.credits', { credits: c < 10 ? c.toFixed(1) : fmtInt(c) }) : translate('scan.map.under-credits'); }
   private hideTip(): void { clearTimeout(this.tipTimer); clearTimeout(this.hideTimer); if (this.tip) this.tip.hidden = true; this.pinned = false; this.menuOpen = false; }

@@ -4,7 +4,7 @@ import { test, expect, type Page } from '@playwright/test';
  * simulator's remover is the demo stand-in: nothing is sent anywhere. Skips itself without the dev server on 5173, or when
  * that server's build has deleting off.
  */
-const DEV = 'http://localhost:5173';
+const DEV = process.env.E2E_DEV_URL ?? 'http://localhost:5173'; // E2E_DEV_URL: a dev server on another port
 test.use({ baseURL: DEV });
 test.setTimeout(180_000);
 test.beforeEach(async () => {
@@ -61,4 +61,26 @@ test('simulator, admin: while maps and apps are still being read, the bar says i
   expect(first).toBe('waiting');
   await expect(page.locator('[data-action="pick-delete"]')).toHaveCount(0);
   await expect(bar).toHaveAttribute('data-delete-status', 'ready', { timeout: 170_000 });
+});
+
+test('simulator, admin: a rectangle offers the small layers in its area that the chart does not draw, and Include adds them', async ({ page }) => {
+  await openAs(page, 'n=1200&speed=1');
+  await expect(page.locator('[data-bar="delete-select"]')).toHaveAttribute('data-delete-status', 'ready', { timeout: 170_000 });
+  const map = page.locator('dc-review dc-dot-map');
+  const canvas = map.locator('canvas');
+  await canvas.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(1500);
+  const { drawn, all } = await map.evaluate((m) => ({ drawn: (m as unknown as { sprites: unknown[] }).sprites.length, all: (m as unknown as { model: { dots: unknown[] } }).model.dots.length }));
+  expect(all, 'this org has layers under the small-layer floor').toBeGreaterThan(drawn);
+  const box = (await canvas.boundingBox())!;
+  await page.mouse.move(box.x + 72, box.y + 13);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 15, box.y + box.height - 41, { steps: 10 });
+  await page.mouse.up();
+  const count = () => page.locator('[data-chart-sel-count]').innerText().then((t) => Number(t.match(/\d[\d,.]*/)![0].replace(/[,.]/g, '')));
+  expect(await count()).toBe(drawn);
+  await expect(page.locator('[data-rect-hidden]')).toContainText(String(all - drawn));
+  await page.locator('[data-action="rect-include-hidden"]').click();
+  expect(await count()).toBe(all);
+  await expect(page.locator('[data-rect-hidden]')).toHaveCount(0);
 });

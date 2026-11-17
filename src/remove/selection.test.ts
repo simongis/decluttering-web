@@ -9,6 +9,11 @@ describe('addPicked (a rectangle on the chart)', () => {
     expect([...r.next].sort()).toEqual(['a', 'c']);
     expect(r).toMatchObject({ inRect: 4, added: 1, dropped: 2 });
   });
+  it('offers the hidden small layers in the area that the user may delete and has not selected, without adding them', () => {
+    const r = addPicked(new Set(['c']), ['a'], deletable, ['b', 'c', 'x', 'a', 'b']);
+    expect(r.hidden).toEqual(['b']); // c already selected, x not deletable, a taken by the rectangle itself
+    expect([...r.next].sort()).toEqual(['a', 'c']);
+  });
   it('an empty rectangle changes nothing', () => {
     const sel = new Set(['a']);
     expect(addPicked(sel, [], deletable)).toMatchObject({ inRect: 0, added: 0, dropped: 0 });

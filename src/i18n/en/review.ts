@@ -485,6 +485,8 @@ export const enReview = {
   'review.delete.rect.added': { one: 'The rectangle added {count} layer.', other: 'The rectangle added {count} layers.' },
   'review.delete.rect.already': 'Everything in the rectangle was already selected.',
   'review.delete.rect.none': 'Nothing in that rectangle that you can delete.',
+  'review.delete.rect.hidden': { one: '{count} layer under {mb} MB in this area isn’t drawn on the chart.', other: '{count} layers under {mb} MB in this area aren’t drawn on the chart.' },
+  'review.delete.rect.includeHidden': { one: 'Include it', other: 'Include them' },
   'review.delete.rect.dropped': { one: '{count} left out: you can’t delete it.', other: '{count} left out: you can’t delete them.' },
   'review.delete.noneSelected': 'No layers selected to delete yet.',
   'review.delete.offList': { one: '{count} not on the list (outside the rule)', other: '{count} not on the list (outside the rule)' },

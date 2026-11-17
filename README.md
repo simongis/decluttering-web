@@ -160,7 +160,8 @@ Some layers are better gone: old copies, abandoned projects, layers that take a 
 
 ### Choosing what to delete
 
-- **On the chart:** drag a rectangle over the dots. Every layer inside it is added to the delete selection, **whether or not it meets the rule**. The chart shows all your layers; the list only shows those the rule picks out. Each rectangle adds to the selection and says how many it added, and how many it left out because you can't delete them. Selected layers get a red ring.
+- **On the chart:** drag a rectangle over the dots. Every layer inside it is added to the delete selection, **whether or not it meets the rule**. The chart shows all your layers; the list only shows those the rule picks out. Each rectangle adds to the selection and says how many it added, and how many it left out because you can't delete them. A dot counts as soon as any of it is inside, so the dot you start dragging on is taken. Selected layers get a red ring.
+  - In an org with more than 150 layers the chart doesn't draw layers under 3 MB (unless you choose to show them). A rectangle says how many of those are in its area, and **Include them** adds them too.
 - **Click a dot** to choose **View item** (opens it in ArcGIS Online, in a new tab), **Add to / Remove from selection**, or **Delete…** (just that layer). From the keyboard: arrow keys move between dots, Enter opens the same choice, Escape closes it.
 - **On the list:** every layer row has **Select to delete** and a **Delete…** button. The bar above the list has **Select all**, the number of layers and the storage selected (and how many are outside the list), **Clear selection** and **Delete selected…**. The same count and buttons sit right above the chart.
 - **In a layer's panel:** **Delete…**.
