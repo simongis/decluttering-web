@@ -41,7 +41,7 @@ test('How stale is the default view: the scan\'s dot map, How stale only, its st
   await expect(card(page)).toHaveAttribute('data-chart-view', 'stale');
   await expect(map(page)).toBeVisible();
   // One question per card: no lens switch on Review.
-  await expect(map(page).locator('calcite-segmented-control')).toHaveCount(0);
+  await expect(map(page).locator('[data-scan="lenses"]')).toHaveCount(0);
   await expect(map(page)).toHaveAttribute('data-stale-services', String(evaluate(data, START).totals.services));
   // The Sankey is still there, on "By owner".
   await expect(page.locator('dc-review dc-sankey')).toHaveCount(1);

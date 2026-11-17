@@ -63,6 +63,8 @@ flowchart TD
     style K fill:#eaf6ef,stroke:#2f7d4f
 ```
 
+On Review, the chart's **Vertical scale** switch offers **Log, in weeks**: most layers were used in the last few weeks, and on the standard scale they pile up near "today"; the log scale spreads them out (1, 2, 4, 13, 26, 52 and 104 weeks). The choice is remembered in your browser.
+
 You can see and change every number. Starting points fill them in:
 
 | Starting point | Last used | Last updated | Used by | Size |
@@ -249,6 +251,7 @@ Checks: `npm run typecheck && npm run lint && npm test && npm run e2e`.
 - **Delete stale or large layers from Review**, off unless the build sets `VITE_DELETING=on`. Select layers by dragging a rectangle on the chart, from the list, or one at a time; confirm by typing a word. Never a permanent delete; each layer is checked again first. See [Deleting layers](#deleting-layers-off-by-default).
 - **A click on a chart dot asks** whether to view the item or delete it (Review only; the scan screen still opens the item).
 - **The header shows the version**, the commit and whether deleting is on.
+- **Log scale in weeks** for the Review chart's vertical axis (last used), so recently used layers no longer pile up at the bottom.
 
 **1.3.0** (2 November 2026):
 - **Click a layer for its story.** Monthly usage bars on every row; click for a panel with a usage calendar or monthly bars (12 months or 2 years) and everything that uses the layer, including offline map areas and Survey123 forms.

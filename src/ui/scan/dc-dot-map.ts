@@ -14,7 +14,7 @@ import {
   DENSITY_ABOVE, ENTER_MS, FADE_MS, HEIGHT_MS, LENSES, LENS_MS, LENS_STAGGER_MS, STAGGER_MAX_MS, TRAVEL_MS, Y_BAND,
   clamp, densityAlpha, densityBins, entryLook, hash, heightTween, lensPoint, mapHeight, motionAt, pendingRadius, prePoint,
   rampColour, retarget, seedOf, sizeBand, sizeRadius, staggerDelay, staleZone, zoneBox, tweenAt, tweenDone, xSize, xUpdate, yLastUsed,
-  type LensId, type Motion, type Place, type Tween,
+  LOG_WEEK_TICKS, Y_SCALES, type LensId, type Motion, type Place, type Tween, type YScale,
 } from './dot-layout';
 import { chartPalette, type ChartPalette } from './chart-palette';
 import { idsInRect, isDrag, normalise, type DragRect } from './dot-select';
@@ -39,6 +39,9 @@ import { onSkinChange } from '../skin/skin';
 const TIP_DELAY = 400, FADE_HALF = 120, REVEAL_MS = 900;
 const SHOW_SMALL_KEY = 'decluttering:dotmap.showSmall';
 const readShowSmall = (): boolean => { try { return localStorage.getItem(SHOW_SMALL_KEY) === '1'; } catch { return false; } };
+const Y_SCALE_KEY = 'decluttering:dotmap.yScale';
+const readYScale = (): YScale => { try { return localStorage.getItem(Y_SCALE_KEY) === 'log-weeks' ? 'log-weeks' : 'standard'; } catch { return 'standard'; } };
+const writeYScale = (v: YScale): void => { try { localStorage.setItem(Y_SCALE_KEY, v); } catch { /* blocked storage: not remembered */ } };
 const writeShowSmall = (v: boolean): void => { try { localStorage.setItem(SHOW_SMALL_KEY, v ? '1' : '0'); } catch { /* private window or blocked storage: the choice just is not remembered */ } };
 const INSET = 16;
 /** ADR 0016: the ring on dots chosen for deleting, and the drag rectangle. Calcite's danger red reads on both looks. */
@@ -100,6 +103,17 @@ export class DcDotMap extends LitElement {
   private menuOpen = false;
   /** DC-079: layers under SMALL_LAYER_MB are left off the map unless the viewer asks for them (remembered per browser). */
   @state() private showSmall = readShowSmall();
+  /** Offer the vertical scale switch on "How stale" (Review). Without it the map always draws the standard scale. */
+  @property({ type: Boolean, attribute: 'scale-switch' }) scaleSwitch = false;
+  /** The vertical scale picked on Review (remembered per browser). */
+  @state() private yPick: YScale = readYScale();
+  /** The scale drawn: the pick where the switch is offered, standard everywhere else. */
+  private get yScale(): YScale { return this.scaleSwitch ? this.yPick : 'standard'; }
+  private setYScale(v: YScale): void {
+    if (v === this.yPick) return;
+    this.yPick = v; writeYScale(v); this.hideTip();
+    this.rebuild(true); this.kick();
+  }
   private floorMemo: { model: DotModel; show: boolean; lens: LensId; expected: number; out: { model: DotModel; hidden: HiddenSmall } } | null = null;
   /** What is drawn: the latest model with the display floor applied. */
   private shown: DotModel = this.model;
@@ -214,7 +228,7 @@ export class DcDotMap extends LitElement {
       this.cellHalf = Math.min(gw / COLS, gh / ROWS) / 2;
       return [(d.i % COLS + 0.5) / COLS, 1 - (Math.floor(d.i / COLS) + 0.5) / ROWS, Math.min(r, Math.max(1.2, this.cellHalf * 0.9))];
     }
-    const [x, y] = lensPoint(this.lens, d, d.seed, this.thresholds, m.maxSizeMB);
+    const [x, y] = lensPoint(this.lens, d, d.seed, this.thresholds, m.maxSizeMB, this.yScale);
     return [x, y, sizeRadius(d.sizeMB, m.maxSizeMB, wide)];
   }
 
@@ -391,18 +405,21 @@ export class DcDotMap extends LitElement {
     }
     let xTitle: string, yTitle: string;
     if (this.lens === 'stale') {
-      const z = staleZone(t);
+      const ys = this.yScale, z = staleZone(t, ys);
       const zx = this.plotX(z.x) - 0.5, zy = this.plotY(z.y), zyTop = p.y0 + 2, zr = right - 2;
       ctx.fillStyle = P.zoneFill; ctx.fillRect(zx, zyTop, zr - zx, zy - zyTop);
       const sy = Math.round(this.plotY(0.893)) + 0.5; // separator under the "No use" band (no use recorded)
       ctx.beginPath(); ctx.moveTo(p.x0, sy); ctx.lineTo(right, sy); ctx.strokeStyle = P.sep; ctx.setLineDash([2, 3]); ctx.stroke(); ctx.setLineDash([]);
       ctx.globalAlpha = this.preTimed ? 1 : k; timeAxis(); ctx.globalAlpha = k; // the time axis was already there
       yt((Y_BAND[0] + Y_BAND[1]) / 2, translate('scan.map.no-use'), false);
-      for (const [d, l] of [[0, translate('scan.map.today')], [90, translate('scan.map.months-3')], [180, translate('scan.map.months-6')], [365, translate('scan.map.years-1')], [730, translate('scan.map.years-2')]] as const) yt(yLastUsed(d), l);
-      xTitle = translate('scan.map.last-updated'); yTitle = translate('scan.map.last-used');
+      const ticks: [number, string][] = ys === 'log-weeks'
+        ? [[0, translate('scan.map.today')], ...LOG_WEEK_TICKS.map(([d, w]): [number, string] => [d, fmtInt(w)])] // the unit is in the axis title: long labels don't fit the margin
+        : [[0, translate('scan.map.today')], [90, translate('scan.map.months-3')], [180, translate('scan.map.months-6')], [365, translate('scan.map.years-1')], [730, translate('scan.map.years-2')]];
+      for (const [d, l] of ticks) yt(yLastUsed(d, ys), l);
+      xTitle = translate('scan.map.last-updated'); yTitle = translate(ys === 'log-weeks' ? 'scan.map.last-used-log' : 'scan.map.last-used');
       // FB-63: the border goes on after the grid lines. A grid line (1 year, 6 months...) can sit on the zone's edge, and painted first
       // the border was wiped out by it (Gentle and Suggested put the left edge exactly on "1 year").
-      const zb = zoneBox(p, INSET, t);
+      const zb = zoneBox(p, INSET, t, ys);
       ctx.save(); ctx.strokeStyle = P.zoneLine; ctx.setLineDash(P.starChart ? [6, 3] : [4, 3]); ctx.strokeRect(zb.left, zb.top, zb.right - zb.left, zb.bottom - zb.top); ctx.restore();
       ctx.globalAlpha = k * 0.95;
       // FB-41: no corner labels; the axis titles and the stale zone say it.
@@ -685,13 +702,18 @@ export class DcDotMap extends LitElement {
     const minimalHiddenLabel = hid.noStorage > 0 ? translate(hid.count > 0 ? 'scan.map.hidden.minimal-lower' : 'scan.map.hidden.minimal') : '';
     const hiddenNote = smallHiddenLabel && minimalHiddenLabel ? translate('scan.map.hidden.join', { small: smallHiddenLabel, minimal: minimalHiddenLabel }) : translate('scan.map.hidden.join-only', { small: smallHiddenLabel, minimal: minimalHiddenLabel });
     return html`
-      <div class="dm-wrap" data-lens=${this.lens}>
+      <div class="dm-wrap" data-lens=${this.lens} data-y-scale=${this.yScale}>
         <div class="dm-lens">
           ${this.lenses.length < 2 ? nothing : html`<calcite-segmented-control scale="s" width="auto" label=${translate('scan.map.axis-arrange')} ?disabled=${!ready} data-scan="lenses"
             @calciteSegmentedControlChange=${(e: Event) => this.setLens((e.target as HTMLElement & { value: string }).value as LensId)}>
             ${LENSES.filter((l) => this.lenses.includes(l.id)).map((l) => html`<calcite-segmented-control-item value=${l.id} .checked=${live(l.id === this.picked)}>${l.label}</calcite-segmented-control-item>`)}
           </calcite-segmented-control>`}
           <span class="dm-lens-note" data-scan="lens-note">${note}</span>
+          ${this.scaleSwitch && this.lens === 'stale' ? html`<span class="dm-scale"><span class="dm-scale-l" id="dm-scale-l">${translate('scan.map.scale.label')}</span>
+            <calcite-segmented-control scale="s" width="auto" data-scan="y-scale" label=${translate('scan.map.scale.label')} ?disabled=${!ready}
+              @calciteSegmentedControlChange=${(e: Event) => this.setYScale((e.target as HTMLElement & { value: string }).value as YScale)}>
+              ${Y_SCALES.map((s) => html`<calcite-segmented-control-item value=${s} .checked=${live(s === this.yPick)}>${translate(s === 'log-weeks' ? 'scan.map.scale.log' : 'scan.map.scale.standard')}</calcite-segmented-control-item>`)}
+            </calcite-segmented-control></span>` : nothing}
         </div>
         <div class="dm-stage">
           <canvas tabindex="0" role="application" aria-roledescription=${translate('scan.map.canvas-title')} aria-describedby="dc-dm-help dc-dm-tip" data-scan="dots"

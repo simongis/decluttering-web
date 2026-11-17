@@ -131,3 +131,7 @@ calcite-segmented-control[disabled] + .dm-lens-note { font-style: italic; }
 .dm-tip .dm-del { border-color: #d83020; color: #b42515; }
 .dm-tip .dm-del:disabled { cursor: not-allowed; opacity: 0.55; }
 .dm-select-hint { margin: 0.4rem 0 0; padding: 0.4rem 0.6rem; border-inline-start: 3px solid #d83020; background: var(--calcite-color-foreground-2); font-size: 0.8125rem; color: var(--calcite-color-text-2); }
+
+/* The vertical scale switch on Review's "How stale" chart. */
+.dm-scale { display: inline-flex; align-items: center; gap: 0.5rem; margin-inline-start: auto; }
+.dm-scale-l { font-size: 0.8125rem; color: var(--calcite-color-text-2); white-space: nowrap; }

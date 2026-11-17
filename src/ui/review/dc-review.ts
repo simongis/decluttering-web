@@ -380,7 +380,7 @@ export class DcReview extends LitElement {
       <div class="chart-view" data-view="stale" ?hidden=${view !== 'stale'}>
         ${m ? this.chartSelection() : nothing}
         ${m ? html`<dc-dot-map .model=${m} .org=${this.org} .thresholds=${this.dotsT ?? this.effective()} .lenses=${STALE_ONLY} .zoneLabel=${zoneName(shown)}
-          lenses-ready height-scale="0.9" data-stale-services=${inZone} ?actions=${this.deleteStatus !== 'off'} ?selectable=${this.deleteStatus === 'ready'} .selected=${this.delSel}
+          lenses-ready scale-switch height-scale="0.9" data-stale-services=${inZone} ?actions=${this.deleteStatus !== 'off'} ?selectable=${this.deleteStatus === 'ready'} .selected=${this.delSel}
           .deleteWhy=${this.deleteStatus === 'off' ? undefined : this.dotDeleteWhy} @dc-dots-select=${this.onDotsSelect} @dc-delete-pick=${this.onDeletePick}></dc-dot-map>` : nothing}
       </div>
       <div class="chart-view chart-slot" data-view="owner" ?hidden=${view !== 'owner'}></div>
