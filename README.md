@@ -223,7 +223,7 @@ npm run dev               # http://localhost:5173
 2. **Choose where sending can be turned on** with `VITE_SENDING`: empty or `off` (review-only), `list` (only the org ids in `VITE_WRITABLE_ORG_IDS`) or `opt-in` (any org; each admin turns it on for themselves).
 3. **Optionally turn on deleting** with `VITE_DELETING=on` (see [Deleting layers](#deleting-layers-off-by-default)). Empty or anything else means off.
 
-The redirect URL must match exactly, port included. If port 5173 is busy, Vite moves to 5174 and sign-in fails with *Invalid redirect_uri*; stop the other server, or start with `npx vite --strictPort` so it stops instead of moving.
+The redirect URL must match exactly, port included. `npm run dev` always uses port 5173 and stops with an error if it is taken (another dev server is running), instead of moving to 5174, where sign-in would fail with *Invalid redirect_uri*.
 
 Checks: `npm run typecheck && npm run lint && npm test && npm run e2e`.
 

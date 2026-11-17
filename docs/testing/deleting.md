@@ -6,7 +6,7 @@ The automated tests cover the guard, the remover and the whole flow in the demo 
 
 1. Register an OAuth app: Content › New item › Developer credentials › **OAuth 2.0 credentials (user authentication)**. Add the redirect URL `http://localhost:5173/` exactly (http, port 5173, trailing slash). No client secret is needed.
 2. In `.env`: `VITE_ARCGIS_CLIENT_ID=<the client ID>` and `VITE_DELETING=on`.
-3. Make sure nothing else uses port 5173, then `npm run dev` (or `npx vite --strictPort`). If Vite says 5174, sign-in fails with *Invalid redirect_uri*.
+3. `npm run dev`. It always uses port 5173; if it stops with "Port 5173 is in use", another dev server is running, so stop that one first.
 4. Open `http://localhost:5173/` and check the header: `v<version> · <commit> · deleting on`.
 5. In ArcGIS Online, create the test layers:
    - **A**: a small hosted feature layer (a published CSV is enough).

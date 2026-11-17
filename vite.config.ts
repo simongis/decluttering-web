@@ -67,6 +67,9 @@ export default defineConfig(({ mode }) => {
   const env = { ...loadEnv(mode, process.cwd(), 'VITE_'), ...process.env };
   return {
     base: process.env.BASE_PATH || '/',
+    // The OAuth redirect is registered for port 5173 exactly. Fail loudly when it is taken instead of moving to 5174,
+    // where sign-in would fail with "Invalid redirect_uri".
+    server: { port: 5173, strictPort: true },
     define: { __DC_COMMIT__: JSON.stringify(gitCommit()) },
     plugins: [cspPlugin(env.VITE_ARCGIS_PORTAL_URL), ...beaconPlugins(mode, env)],
     test: { include: ['src/**/*.test.ts', 'tests/**/*.test.ts', 'vite.config.test.ts'] },
