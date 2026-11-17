@@ -34,6 +34,9 @@ Sign in, run a scan and wait until maps and apps have been checked (the delete b
 | 11 | Select several layers, start the delete and press **Stop** | Deleting stops before the next layer; the result lists what went and what didn't |
 | 12 | Reload the page | Deleted layers do not come back from the saved scan |
 | 13 | Sign in with an account that has neither privilege | The delete bar says the account can't delete; no Delete buttons |
+| 14 | As a member, draw a rectangle over your layers and others' | The note says how many it added and how many it left out because you can't delete them |
+| 15 | Select three layers, open the dialog, **Remove** one | The dialog lists two; after Cancel the selection holds two |
+| 16 | After a delete, **Download report (CSV)** and open it in a spreadsheet | One row per layer with time, org, you, owner, size, result and reason; accents read correctly |
 
 Record the results, especially check 6 (the recycle bin) and check 8 (a layer with views), in the pull request. ADR 0016 stays **Proposed** until they pass.
 
