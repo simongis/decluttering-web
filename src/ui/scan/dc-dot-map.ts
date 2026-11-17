@@ -574,6 +574,8 @@ export class DcDotMap extends LitElement {
     const why = this.deleteWhy?.(d.id) ?? '';
     return html`<span class="dm-t-actions" @keydown=${this.onMenuKey}>
       <a class="dm-act" data-dot-action="view" href=${this.urlOf(d)} target="_blank" rel="noopener" @click=${() => this.closeMenu(false)}>${translate('scan.map.menu.view')}<span class="dc-sr">${translate('scan.new-tab')}</span></a>
+      ${this.selectable && this.deleteWhy && !why ? html`<button type="button" class="dm-act" data-dot-action="pick" aria-pressed=${this.selected.has(d.id) ? 'true' : 'false'}
+        @click=${() => this.dispatchEvent(new CustomEvent('dc-delete-pick', { detail: { id: d.id, checked: !this.selected.has(d.id) }, bubbles: true, composed: true }))}>${translate(this.selected.has(d.id) ? 'scan.map.menu.unpick' : 'scan.map.menu.pick')}</button>` : nothing}
       ${this.deleteWhy ? html`<button type="button" class="dm-act dm-del" data-dot-action="delete" ?disabled=${!!why}
         @click=${() => { this.closeMenu(false); this.dispatchEvent(new CustomEvent('dc-delete-request', { detail: { ids: [d.id] }, bubbles: true, composed: true })); }}>${translate('scan.map.menu.delete')}</button>` : nothing}
     </span>${why ? html`<span class="dm-t-hint" data-dot-why>${why}</span>` : nothing}`;

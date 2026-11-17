@@ -81,6 +81,8 @@ export class DcDeleteDialog extends LitElement {
       <b>${c.title}</b> <span class="dd-meta">${t('review.delete.itemMeta', { owner: c.owner, size })}</span>
       ${c.views.length ? html`<span class="dd-meta">${tn('review.delete.views', c.views.length, { count: formatNumber(c.views.length) })}</span>` : nothing}
       ${c.usedBy ? html`<span class="dd-warn">${tn('review.delete.usedBy', c.usedBy, { count: formatNumber(c.usedBy) })}</span>` : nothing}
+      ${this.items.length > 1 ? html`<button type="button" class="dd-unpick" data-action="delete-unpick" aria-label=${t('review.delete.unpickLabel', { title: c.title })}
+        @click=${() => this.dispatchEvent(new CustomEvent<{ id: string }>('dc-delete-unpick', { detail: { id: c.id }, bubbles: true, composed: true }))}>${t('review.delete.unpick')}</button>` : nothing}
     </li>`;
   }
 

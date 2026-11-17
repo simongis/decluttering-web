@@ -12,7 +12,8 @@ import '../ui/review/index';
 import type { SelectionDetail } from '../ui/review/index';
 import '../ui/review/dc-broken-refs';
 import '../ui/review/dc-delete-dialog';
-import type { DeleteStatus } from '../ui/review/dc-review';
+import type { DcReview } from '../ui/review/dc-review';
+import { deleteStatusOf, type DeleteStatus } from '../remove/selection';
 import '../ui/sankey/dc-sankey';
 import '@esri/calcite-components/dist/components/calcite-button';
 import '@esri/calcite-components/dist/components/calcite-dialog';
@@ -180,11 +181,7 @@ export class AppReview extends LitElement {
   private get mayDeleteAtAll(): boolean { return !!this.remover && (this.deleteScope === 'all' || this.deleteScope === 'own'); }
   /** What the delete bar says: hidden when the build has deleting off, else why it can or can't be used yet. */
   private get deleteStatus(): DeleteStatus {
-    if (!this.remover && DELETING_MODE !== 'on') return 'off';
-    if (!this.mayDeleteAtAll) return 'no-privilege';
-    if (this.stopped) return 'stopped';
-    if (!this.depsKnown || this.refreshing) return 'waiting';
-    return 'ready';
+    return deleteStatusOf({ buildOn: DELETING_MODE === 'on', mayDelete: this.mayDeleteAtAll, stopped: this.stopped, depsKnown: this.depsKnown, refreshing: this.refreshing });
   }
   /**
    * Deleting waits for a finished scan: while maps and apps are still being read (or the scan was stopped), "used by" is unreliable,
@@ -199,11 +196,18 @@ export class AppReview extends LitElement {
     const items = all.filter((c) => this.canDelete(c.owner));
     this.del = { open: true, items, leftOut: all.length - items.length };
   };
+  /** ADR 0016: "Remove" on a layer in the confirm dialog: it leaves the dialog and the selection (the chart's or the list's). */
+  private onUnpick = (e: Event): void => {
+    const id = (e as CustomEvent<{ id: string }>).detail.id;
+    if (this.del.items.length < 2) return;
+    this.del = { ...this.del, items: this.del.items.filter((c) => c.id !== id) };
+    this.querySelector<DcReview>('dc-review')?.unpick(id);
+  };
   private onDeleteRequest = (e: Event): void => { e.stopPropagation(); this.askDelete((e as CustomEvent<{ ids: string[] }>).detail.ids); };
   private deleteDialog() {
     if (!this.deleting) return nothing;
     return html`<dc-delete-dialog .open=${this.del.open} .items=${this.del.items} .leftOut=${this.del.leftOut} .user=${this.username} .remover=${this.remover}
-      @dc-delete-close=${() => { this.del = { ...this.del, open: false }; }}></dc-delete-dialog>`;
+      @dc-delete-unpick=${this.onUnpick} @dc-delete-close=${() => { this.del = { ...this.del, open: false }; }}></dc-delete-dialog>`;
   }
   /** The action bar (admin only): what's ticked, and "Next: write the emails". */
   private actionBar() {

@@ -181,3 +181,57 @@ test('demo: Enter on a focused dot opens the same menu, and Escape closes it bac
   await expect(tip).toBeHidden();
   await expect(page.locator('dc-review dc-dot-map canvas')).toBeFocused();
 });
+
+test('demo: a dot menu adds a layer to the selection and removes it again; a rectangle says what it added', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/#/demo');
+  await reviewReady(page);
+  const dot = await chartDot(page);
+  const count = page.locator('[data-chart-sel-count]');
+  await page.mouse.click(dot.x, dot.y);
+  const tip = page.locator('dc-review .dm-tip');
+  await expect(tip.locator('[data-dot-action="pick"]')).toHaveText('Add to selection');
+  await tip.locator('[data-dot-action="pick"]').click();
+  await expect(count).toContainText('1 layer selected');
+  await expect(tip.locator('[data-dot-action="pick"]')).toHaveText('Remove from selection');
+  await tip.locator('[data-dot-action="pick"]').click();
+  await expect(count).toContainText('No layers selected');
+  await page.keyboard.press('Escape');
+  // A rectangle reports what it did, under the count.
+  const { box } = await chartDot(page);
+  await page.mouse.move(box.x + 72, box.y + 14);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 16, box.y + box.height - 42, { steps: 10 });
+  await page.mouse.up();
+  await expect(page.locator('[data-rect-note]')).toContainText(/The rectangle added \d+ layers?\./);
+  // The same rectangle again adds nothing new, and says so.
+  await page.mouse.move(box.x + 72, box.y + 14);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 16, box.y + box.height - 42, { steps: 10 });
+  await page.mouse.up();
+  await expect(page.locator('[data-rect-note]')).toContainText('already selected');
+  await page.locator('[data-action="chart-sel-clear"]').click();
+  await expect(page.locator('[data-rect-note]')).toHaveText('');
+  // The note never moves the chart.
+  expect((await page.locator('dc-review dc-dot-map canvas').boundingBox())!.y).toBeCloseTo(box.y, 0);
+});
+
+test('demo: Remove in the confirm dialog takes a layer out of the delete and out of the selection', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/#/demo');
+  await reviewReady(page);
+  const picks = page.locator('dc-family-row [data-action="pick-delete"]');
+  await picks.nth(0).click();
+  await picks.nth(1).click();
+  await expect(page.locator('[data-del-count]')).toContainText('2 layers selected');
+  await page.locator('[data-action="delete-selected"]').click();
+  await expect(dialog(page)).toHaveAttribute('open', '');
+  await expect(page.locator('dc-delete-dialog [data-delete-item]')).toHaveCount(2);
+  await page.locator('dc-delete-dialog [data-action="delete-unpick"]').first().click();
+  await expect(page.locator('dc-delete-dialog [data-delete-item]')).toHaveCount(1);
+  // The last one can't be removed: Cancel is the way out.
+  await expect(page.locator('dc-delete-dialog [data-action="delete-unpick"]')).toHaveCount(0);
+  await expect(page.locator('dc-delete-dialog [data-action="delete-go"]')).toContainText('Delete 1 layer');
+  await page.locator('dc-delete-dialog [data-action="delete-cancel"]').click();
+  await expect(page.locator('[data-del-count]')).toContainText('1 layer selected');
+});

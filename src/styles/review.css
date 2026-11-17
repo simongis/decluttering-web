@@ -469,3 +469,8 @@ dc-item-panel calcite-panel { height: 100%; box-shadow: -8px 0 24px rgb(0 0 0 / 
 .del-bar .del-off { color: var(--calcite-color-status-warning-text, #8a5a00); }
 .chart-sel { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin-top: 0.5rem; padding: 0.4rem 0.6rem; border: 1px solid #d83020; border-radius: 4px; background: var(--calcite-color-foreground-1); }
 .chart-sel b { flex: 1 1 12rem; font-size: 0.875rem; }
+.chart-sel .chart-sel-note { flex: 1 1 100%; min-height: 1.25rem; font-size: 0.8125rem; line-height: 1.25rem; color: var(--calcite-color-text-2); }
+.chart-sel .chart-sel-note.warn { color: var(--calcite-color-status-warning-text, #8a5a00); }
+.dd-list li:has(.dd-unpick) { position: relative; padding-inline-end: 4.5rem; }
+.dd-unpick { position: absolute; inset-inline-end: 0; top: 0; padding: 0.15rem 0.5rem; font: inherit; font-size: 0.8125rem; cursor: pointer; border: 1px solid var(--calcite-color-border-1); border-radius: 3px; background: var(--calcite-color-foreground-1); color: var(--calcite-color-text-2); }
+.dd-unpick:hover, .dd-unpick:focus-visible { background: var(--calcite-color-foreground-2); outline: 2px solid var(--calcite-color-brand); outline-offset: 1px; }

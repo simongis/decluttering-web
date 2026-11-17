@@ -95,6 +95,8 @@ export const esScan: Record<keyof typeof enScan, Message> = {
   'scan.map.tip.to-menu': ' para verla o borrarla',
   'scan.map.menu.view': 'Ver elemento ↗',
   'scan.map.menu.delete': 'Borrar…',
+  'scan.map.menu.pick': 'Agregar a la selección',
+  'scan.map.menu.unpick': 'Quitar de la selección',
   'scan.map.select.hintLead': 'Seleccionar en la gráfica:',
   'scan.map.select.hint': 'arrastra un rectángulo sobre los puntos para agregar esas capas a la selección de borrado. Cada rectángulo se suma a la selección.',
   'scan.map.select.done': { one: '{count} capa en el rectángulo.', other: '{count} capas en el rectángulo.' },

@@ -95,6 +95,8 @@ export const enScan = {
   'scan.map.tip.to-menu': ' to view or delete',
   'scan.map.menu.view': 'View item ↗',
   'scan.map.menu.delete': 'Delete…',
+  'scan.map.menu.pick': 'Add to selection',
+  'scan.map.menu.unpick': 'Remove from selection',
   'scan.map.select.hintLead': 'Select on the chart:',
   'scan.map.select.hint': 'drag a rectangle over the dots to add those layers to the delete selection. Each rectangle adds to it.',
   'scan.map.select.done': { one: '{count} layer in the rectangle.', other: '{count} layers in the rectangle.' },
