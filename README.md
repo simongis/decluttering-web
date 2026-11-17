@@ -184,7 +184,7 @@ The app's own wording follows the build: with deleting off it promises it never 
 
 ### Which version am I looking at?
 
-The header shows the version, the commit and whether this build can delete, for example `v1.3.0-borrado.5 · 3d7502b · deleting on`. A `+` after the commit means the copy had uncommitted changes. If it says `deleting off`, set `VITE_DELETING=on` and restart the dev server.
+The header shows the version, the commit and whether this build can delete, for example `v1.4.0-dev.6 · bb2b03c · deleting on`. The `-dev.N` part counts changes on an unreleased branch. A `+` after the commit means the copy had uncommitted changes. If it says `deleting off`, set `VITE_DELETING=on` and restart the dev server.
 
 ## Sending is switched on by each admin
 
