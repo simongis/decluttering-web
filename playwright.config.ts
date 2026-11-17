@@ -18,5 +18,7 @@ export default defineConfig({
     url: `http://localhost:${port}`,
     reuseExistingServer: !process.env.CI && !own,
     timeout: 180_000,
+    // ADR 0016: the specs cover deleting, so the build under test has it on whatever the local .env says.
+    env: { VITE_DELETING: 'on' },
   },
 });

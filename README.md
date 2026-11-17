@@ -180,7 +180,7 @@ After a delete, the layers leave the list, the chart and the saved scan. Maps an
 
 **Keep a record.** ArcGIS Online doesn't tell owners when an admin deletes their layers, and the app keeps no record (it has no server). The result has **Download report (CSV)**: one row per layer with when, who, the owner, size, views, the result and the reason when it wasn't deleted. Use it to keep a record or to tell the owners. Text that a spreadsheet would run as a formula is defused.
 
-The demo shows the whole flow without touching anything. The design is in [ADR 0016](docs/adr/0016-deleting-layers.md), and a manual test plan for a real org is in [docs/testing/deleting.md](docs/testing/deleting.md).
+The app's own wording follows the build: with deleting off it promises it never deletes (About, the tour, the note for your admin) and the demo shows no delete; with it on, those say layers are deleted only when someone chooses them and confirms, and the demo shows the whole flow without touching anything. The design is in [ADR 0016](docs/adr/0016-deleting-layers.md), and a manual test plan for a real org is in [docs/testing/deleting.md](docs/testing/deleting.md).
 
 ### Which version am I looking at?
 

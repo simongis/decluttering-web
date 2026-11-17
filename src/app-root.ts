@@ -705,7 +705,7 @@ export class AppRoot extends LitElement {
     const d = this.demoData;
     return html`
       ${this.error ? html`<p role="alert">${this.error}</p>` : nothing}
-      <div ?hidden=${emails}>${d ? renderReview({ data: d, mode: 'admin', canSeeUsage: true, emailsRoute: 'demo-emails', username: DEMO_USER.username, deleteScope: 'all', remover: (this.demoRemover ??= createDemoRemover()), onRemoved: this.onRemoved }) : nothing}</div>
+      <div ?hidden=${emails}>${d ? renderReview({ data: d, mode: 'admin', canSeeUsage: true, emailsRoute: 'demo-emails', username: DEMO_USER.username, deleteScope: DELETING_MODE === 'on' ? 'all' : 'none', remover: DELETING_MODE === 'on' ? (this.demoRemover ??= createDemoRemover()) : null, onRemoved: this.onRemoved }) : nothing}</div>
       ${emails && d ? html`<app-emails demo .admin=${DEMO_ADMIN} orgId=${d.org.id} orgName=${d.org.name} writable></app-emails>` : nothing}`;
   }
 
@@ -730,7 +730,7 @@ export class AppRoot extends LitElement {
       <div ?hidden=${onScan || emails}>
         ${this.renderScanStatus()}
         <div data-scan-state=${this.stopped ? 'stopped' : this.background || this.flow.state === 'scanning' ? 'running' : 'done'} data-demo="play">
-          ${renderReview({ data, mode: 'admin', canSeeUsage: true, depsKnown: this.depsKnown, stopped: this.stopped, emailsRoute: 'demo-emails', username: DEMO_USER.username, deleteScope: 'all', remover: (this.demoRemover ??= createDemoRemover()), onRemoved: this.onRemoved })}
+          ${renderReview({ data, mode: 'admin', canSeeUsage: true, depsKnown: this.depsKnown, stopped: this.stopped, emailsRoute: 'demo-emails', username: DEMO_USER.username, deleteScope: DELETING_MODE === 'on' ? 'all' : 'none', remover: DELETING_MODE === 'on' ? (this.demoRemover ??= createDemoRemover()) : null, onRemoved: this.onRemoved })}
         </div>
       </div>` : nothing}
       ${emails && data ? html`<app-emails demo .admin=${DEMO_ADMIN} orgId=${data.org.id} orgName=${data.org.name} writable></app-emails>` : nothing}`;

@@ -1,6 +1,7 @@
 // DC-074: the dev route `#/simulate?n=7000&speed=1`. Parses the URL into a simulated org and a fake signed-in access.
 // Only ever loaded through `if (import.meta.env.DEV) await import('./dev/simulate')` in app-root.ts, so production builds drop it.
 import type { AccessInfo } from '../auth/session';
+import { deleteScope } from '../auth/deleting';
 import { DEFAULT_SIM, createSimulatedOrg, type SimulatedOrg, type SimulatedOrgConfig } from './simulated-org';
 
 export interface SimulateParams { config: Partial<SimulatedOrgConfig> }
@@ -39,7 +40,7 @@ export function startSimulation(p: SimulateParams): Simulation {
   const org = createSimulatedOrg(p.config);
   const access: AccessInfo = {
     mode: 'admin', username: 'sim_admin', fullName: 'Sim Admin', orgName: org.config.orgName, orgId: org.config.orgId,
-    role: 'org_admin', usageReadable: true, writable: true, deleteScope: 'all',
+    role: 'org_admin', usageReadable: true, writable: true, deleteScope: deleteScope(['portal:admin:deleteItems']), // 'none' when this build has deleting off
   };
   (window as unknown as { __sim?: unknown }).__sim = { config: org.config, stats: org.stats, services: org.world.services.length, maps: org.world.maps.length, owners: org.world.owners.length };
   return { org, access };

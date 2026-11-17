@@ -261,3 +261,10 @@ test('demo: after a delete, the report downloads as CSV with one row per layer a
     expect(lines[i + 1]).toContain(',demo_admin,');
   }
 });
+
+test('a build with deleting on says so: the header, and About no longer promises it never deletes', async ({ page }) => {
+  await page.goto('/#/about');
+  await expect(page.locator('.dc-ver')).toContainText('deleting on');
+  await expect(page.locator('body')).toContainText('This copy can also delete layers');
+  await expect(page.locator('body')).not.toContainText('never by deleting anything');
+});

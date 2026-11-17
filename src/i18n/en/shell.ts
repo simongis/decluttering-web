@@ -117,6 +117,7 @@ export const enShell = {
   'tour.row.text': 'Each row says why it made the list and about how many credits a month it uses. The title opens it in ArcGIS Online.',
   'tour.tick.title': 'One email per owner',
   'tour.tick.text': 'Tick the owners you would like to nudge. Each gets a single friendly digest, and nothing is deleted.',
+  'tour.tick.text.deleting': 'Tick the owners you would like to nudge. Each gets a single friendly digest, and ticking an owner deletes nothing.',
   'tour.next.title': 'Then write the emails',
   'tour.next.text': 'Next: write the emails comes when you are ready. Nothing is sent until you choose.',
   'tour.next': 'Next',

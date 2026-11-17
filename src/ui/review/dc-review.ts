@@ -2,6 +2,7 @@ import { LitElement, html, nothing, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { LocaleController } from '../../i18n/controller';
 import { formatNumber, t, tn } from '../../i18n';
+import { deletingCopy } from '../shared/deleting-copy';
 import '@esri/calcite-components/dist/components/calcite-block';
 import '@esri/calcite-components/dist/components/calcite-button';
 import '@esri/calcite-components/dist/components/calcite-chip';
@@ -52,7 +53,7 @@ const sameT = (a: Thresholds, b: Thresholds) => T_KEYS.every((k) => (a[k] ?? 0) 
 export const SOLO_NOTE = "You're the only owner here, so there's no one to nudge. Here's your own list to tidy, biggest first.";
 
 const appLink = () => location.origin + location.pathname.replace(/[^/]*$/, '');
-const adminNote = () => t('review.admin.note', { url: appLink() });
+const adminNote = () => t(deletingCopy('review.admin.note', 'review.admin.note.deleting'), { url: appLink() });
 
 /**
  * The review screen: summary, filters, owner list (or one list in member mode), "No one to nudge".
@@ -379,7 +380,7 @@ export class DcReview extends LitElement {
       <div class="chart-view" data-view="stale" ?hidden=${view !== 'stale'}>
         ${m ? this.chartSelection() : nothing}
         ${m ? html`<dc-dot-map .model=${m} .org=${this.org} .thresholds=${this.dotsT ?? this.effective()} .lenses=${STALE_ONLY} .zoneLabel=${zoneName(shown)}
-          lenses-ready height-scale="0.9" data-stale-services=${inZone} actions ?selectable=${this.deleteStatus === 'ready'} .selected=${this.delSel}
+          lenses-ready height-scale="0.9" data-stale-services=${inZone} ?actions=${this.deleteStatus !== 'off'} ?selectable=${this.deleteStatus === 'ready'} .selected=${this.delSel}
           .deleteWhy=${this.deleteStatus === 'off' ? undefined : this.dotDeleteWhy} @dc-dots-select=${this.onDotsSelect} @dc-delete-pick=${this.onDeletePick}></dc-dot-map>` : nothing}
       </div>
       <div class="chart-view chart-slot" data-view="owner" ?hidden=${view !== 'owner'}></div>
@@ -406,7 +407,7 @@ export class DcReview extends LitElement {
     return html`<calcite-block class="nudge" heading=${t('review.nudge.heading')} expanded>
       <calcite-icon slot="icon" icon="group" scale="s"></calcite-icon>
       <div class="block-pad">
-        <p class="mi-p">${t('review.nudge.body')}</p>
+        <p class="mi-p">${t(deletingCopy('review.nudge.body', 'review.nudge.body.deleting'))}</p>
         <calcite-button icon-start="copy" appearance="outline" width="full" @click=${() => this.copyNote()}>${t('review.nudge.copy')}</calcite-button>
         <p class="hint">${t('review.nudge.hint')}</p>
         ${this.toast ? html`<calcite-notice open scale="s" kind="success" icon="check-circle" class="toast"><div slot="message">${this.toast}</div></calcite-notice>` : nothing}
