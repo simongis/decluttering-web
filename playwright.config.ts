@@ -16,7 +16,8 @@ export default defineConfig({
       ? `npx vite build --outDir ${outDir} --emptyOutDir && npx vite preview --outDir ${outDir} --port ${port} --strictPort`
       : 'npm run build && npm run preview -- --strictPort',
     url: `http://localhost:${port}`,
-    reuseExistingServer: !process.env.CI && !own,
+    // Always build and serve this checkout: a server left on the port could be an older build, and the specs would test it.
+    reuseExistingServer: false,
     timeout: 180_000,
     // ADR 0016: the specs cover deleting, so the build under test has it on whatever the local .env says.
     env: { VITE_DELETING: 'on' },

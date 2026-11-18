@@ -11,6 +11,25 @@ export function gitCommit(): string {
 }
 import { defineConfig } from 'vitest/config';
 
+/** A new id for every build and every dev-server start: the app compares the one it runs with <base>version.json. */
+export function buildId(commit: string, now: number = Date.now()): string { return `${commit}-${now.toString(36)}`; }
+
+/** version.json: emitted with the build, and answered by the dev server (never cached). Read by src/update/update.ts. */
+export function versionPlugin(build: string, commit: string): Plugin {
+  const body = () => JSON.stringify({ build, commit });
+  return {
+    name: 'dc-version',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (!(req.url ?? '').split('?')[0]?.endsWith('/version.json')) return next();
+        res.setHeader('Content-Type', 'application/json'); res.setHeader('Cache-Control', 'no-store');
+        res.end(body());
+      });
+    },
+    generateBundle() { this.emitFile({ type: 'asset', fileName: 'version.json', source: body() }); },
+  };
+}
+
 const BEACON_SRC = 'https://static.cloudflareinsights.com/beacon.min.js';
 
 /** Cloudflare Web Analytics beacon (DC-104). Build-only; adds nothing without a plain alphanumeric token. */
@@ -65,13 +84,14 @@ export function cspPlugin(portal?: string): Plugin {
 
 export default defineConfig(({ mode }) => {
   const env = { ...loadEnv(mode, process.cwd(), 'VITE_'), ...process.env };
+  const commit = gitCommit(), build = buildId(commit);
   return {
     base: process.env.BASE_PATH || '/',
     // The OAuth redirect is registered for port 5173 exactly. Fail loudly when it is taken instead of moving to 5174,
     // where sign-in would fail with "Invalid redirect_uri".
     server: { port: 5173, strictPort: true },
-    define: { __DC_COMMIT__: JSON.stringify(gitCommit()) },
-    plugins: [cspPlugin(env.VITE_ARCGIS_PORTAL_URL), ...beaconPlugins(mode, env)],
+    define: { __DC_COMMIT__: JSON.stringify(commit), __DC_BUILD_ID__: JSON.stringify(build) },
+    plugins: [cspPlugin(env.VITE_ARCGIS_PORTAL_URL), ...beaconPlugins(mode, env), versionPlugin(build, commit)],
     test: { include: ['src/**/*.test.ts', 'tests/**/*.test.ts', 'vite.config.test.ts'] },
   };
 });

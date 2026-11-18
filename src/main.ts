@@ -9,9 +9,14 @@ import './styles/scan.css';
 import './styles/skin-console.css';
 import { applySkin, currentSkin } from './ui/skin/skin';
 import { initLocale } from './i18n';
+import { freshStartForBuild, withoutReloadParam } from './update/update';
 
 // The saved or browser language is loaded before the app renders, so the first paint is already in that language.
-void initLocale().finally(() => import('./app-root'));
+// The reload of a new build carries ?b=<build> (to skip a cached index.html); it is not needed once loaded.
+const clean = withoutReloadParam(window.location.href);
+if (clean !== null) window.history.replaceState(window.history.state, '', clean);
+// A new build first clears what the old one saved (the saved scan), before the app reads anything.
+void Promise.allSettled([freshStartForBuild(), initLocale()]).finally(() => import('./app-root'));
 
 setAssetPath('https://js.arcgis.com/calcite-components/3.3.3/assets');
 // DC-135 (ADR 0014): the console look, when this browser chose it. The standard look needs nothing.

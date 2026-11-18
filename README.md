@@ -230,7 +230,9 @@ npm run dev               # http://localhost:5173
 
 The redirect URL must match exactly, port included. `npm run dev` always uses port 5173 and stops with an error if it is taken (another dev server is running), instead of moving to 5174, where sign-in would fail with *Invalid redirect_uri*.
 
-Checks: `npm run typecheck && npm run lint && npm test && npm run e2e`.
+Checks: `npm run typecheck && npm run lint && npm test && npm run e2e`. `npm run e2e` always builds and serves this checkout (it never reuses a server already on the port, which could be an older build). `npm run clean` removes every build and test output and Vite's dependency cache; stop the dev server first.
+
+**Updates.** Every build and every dev-server start has its own id, published as `version.json`. An open tab checks it on load, every 5 minutes and when you come back to it; when a newer build is served it offers **Reload** (never automatic, so a scan, a send or a delete is not cut off). The reload skips a cached `index.html`. The first load of a new build clears the saved scan, which the old build wrote; sign-in and settings stay, so the next scan starts fresh.
 
 ### Deploy to GitHub Pages
 

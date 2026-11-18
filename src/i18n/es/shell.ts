@@ -2,6 +2,9 @@ import type { Message } from '../en/core';
 import type { enShell } from '../en/shell';
 
 export const esShell: Record<keyof typeof enShell, Message> = {
+  'shell.update.text': 'Hay una versión nueva de Decluttering. Recarga para usarla: se mantienen tu configuración y la sesión, y el próximo análisis empieza de cero.',
+  'shell.update.reload': 'Recargar',
+  'shell.update.later': 'Más tarde',
   'shell.version.title': 'Versión {version}, commit {commit}',
   'shell.version.deleteOn': 'borrado activado',
   'shell.version.deleteOff': 'borrado desactivado',

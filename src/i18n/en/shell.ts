@@ -1,6 +1,9 @@
 import type { Message } from './core';
 
 export const enShell = {
+  'shell.update.text': 'A new version of Decluttering is available. Reload to use it; your settings and sign-in stay, and the next scan starts fresh.',
+  'shell.update.reload': 'Reload',
+  'shell.update.later': 'Later',
   'shell.version.title': 'Version {version}, commit {commit}',
   'shell.version.deleteOn': 'deleting on',
   'shell.version.deleteOff': 'deleting off',

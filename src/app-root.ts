@@ -50,6 +50,7 @@ import { pruneRemoved } from './remove/plan';
 import { createDemoRemover } from './demo/demo-remover';
 import type { ItemRemover } from './remove/remover';
 import { BUILD_COMMIT, FEATURE_VERSION } from './version';
+import { reloadUrl, watchForUpdates } from './update/update';
 import { DELETING_MODE } from './auth/deleting';
 import { createSessionNudgeLog, type NudgeLog } from './log';
 import { PORTAL_URL } from './auth/config';
@@ -311,7 +312,12 @@ export class AppRoot extends LitElement {
     return true;
   }
 
+  /** A newer build is served (src/update): the banner offers a reload. Not automatic, so a scan, a send or a delete is never cut off. */
+  @state() private newerBuild: string | null = null;
+  private stopUpdates = watchForUpdates((b) => { this.newerBuild = b; });
+  private reloadNewer = (): void => { if (this.newerBuild) window.location.replace(reloadUrl(window.location.href, this.newerBuild)); };
   override disconnectedCallback(): void {
+    this.stopUpdates();
     clearTimeout(this.tourTimer);
     window.removeEventListener('hashchange', this.onHash);
     this.narrowQuery.removeEventListener('change', this.onNarrow);
@@ -971,6 +977,10 @@ export class AppRoot extends LitElement {
         <calcite-alert kind="success" icon="check-circle" auto-close auto-close-duration="medium" placement="bottom" label=${t('shell.notice.label')} .open=${this.offToast} @calciteAlertClose=${() => { this.offToast = false; }}>
           <div slot="message" data-toast="turn-off">${this.offToast ? TURN_OFF.done : nothing}</div>
         </calcite-alert>` : nothing}
+        ${this.newerBuild ? html`<div class="dc-update" role="status" data-update="available"><calcite-icon icon="refresh" scale="s" aria-hidden="true"></calcite-icon>
+          <span>${t('shell.update.text')}</span>
+          <calcite-button scale="s" data-action="update-reload" @click=${this.reloadNewer}>${t('shell.update.reload')}</calcite-button>
+          <calcite-button scale="s" appearance="transparent" kind="neutral" data-action="update-later" @click=${() => { this.newerBuild = null; }}>${t('shell.update.later')}</calcite-button></div>` : nothing}
         <main style="padding: 1.25rem 1.5rem; margin-inline: auto; max-width: ${this.route === 'app' ? '72rem' : this.route === 'emails' || this.route === 'demo-emails' ? '88rem' : '76rem'}">${this.renderSteps()}${body}</main>
       </calcite-shell>`;
   }
