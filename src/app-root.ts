@@ -10,7 +10,7 @@ import type { DemoOrg } from './demo/demo-org';
 import type { CacheEntry } from './cache/scanCache';
 import { canRescan, rescanClock } from './cache/rescan';
 import { rescanEstimate } from './ui/scan/estimate';
-import { loadCached, runScan, type ScanTap } from './routes/scan-run';
+import { loadCached, pruneCached, runScan, type ScanTap } from './routes/scan-run';
 import type { ScanStages } from './scan/types';
 import { INITIAL_FLOW, nextFlow, type Flow, type FlowEvent } from './ui/scan/scan-flow';
 import { APP_TITLE, createEtaSmoother, currentLine, tabTitle, usageIn } from './ui/scan/stages-view';
@@ -45,6 +45,13 @@ import { TURN_OFF, turnOffSending } from './ui/access/turn-off';
 import './ui/steps/dc-steps';
 import { stepsFor, type StepId } from './ui/steps/steps';
 import { createSessionNotifier, WritesDisabled, type GroupNotifier } from './notify';
+import { createSessionRemover } from './remove/session';
+import { pruneRemoved } from './remove/plan';
+import { createDemoRemover } from './demo/demo-remover';
+import type { ItemRemover } from './remove/remover';
+import { BUILD_COMMIT, FEATURE_VERSION } from './version';
+import { reloadUrl, watchForUpdates } from './update/update';
+import { DELETING_MODE } from './auth/deleting';
 import { createSessionNudgeLog, type NudgeLog } from './log';
 import { PORTAL_URL } from './auth/config';
 import { autoStartReviewTour, closeReviewTour, openReviewTour } from './ui/tour';
@@ -305,7 +312,12 @@ export class AppRoot extends LitElement {
     return true;
   }
 
+  /** A newer build is served (src/update): the banner offers a reload. Not automatic, so a scan, a send or a delete is never cut off. */
+  @state() private newerBuild: string | null = null;
+  private stopUpdates = watchForUpdates((b) => { this.newerBuild = b; });
+  private reloadNewer = (): void => { if (this.newerBuild) window.location.replace(reloadUrl(window.location.href, this.newerBuild)); };
   override disconnectedCallback(): void {
+    this.stopUpdates();
     clearTimeout(this.tourTimer);
     window.removeEventListener('hashchange', this.onHash);
     this.narrowQuery.removeEventListener('change', this.onNarrow);
@@ -699,7 +711,7 @@ export class AppRoot extends LitElement {
     const d = this.demoData;
     return html`
       ${this.error ? html`<p role="alert">${this.error}</p>` : nothing}
-      <div ?hidden=${emails}>${d ? renderReview({ data: d, mode: 'admin', canSeeUsage: true, emailsRoute: 'demo-emails' }) : nothing}</div>
+      <div ?hidden=${emails}>${d ? renderReview({ data: d, mode: 'admin', canSeeUsage: true, emailsRoute: 'demo-emails', username: DEMO_USER.username, deleteScope: DELETING_MODE === 'on' ? 'all' : 'none', remover: DELETING_MODE === 'on' ? (this.demoRemover ??= createDemoRemover()) : null, onRemoved: this.onRemoved }) : nothing}</div>
       ${emails && d ? html`<app-emails demo .admin=${DEMO_ADMIN} orgId=${d.org.id} orgName=${d.org.name} writable></app-emails>` : nothing}`;
   }
 
@@ -724,7 +736,7 @@ export class AppRoot extends LitElement {
       <div ?hidden=${onScan || emails}>
         ${this.renderScanStatus()}
         <div data-scan-state=${this.stopped ? 'stopped' : this.background || this.flow.state === 'scanning' ? 'running' : 'done'} data-demo="play">
-          ${renderReview({ data, mode: 'admin', canSeeUsage: true, depsKnown: this.depsKnown, stopped: this.stopped, emailsRoute: 'demo-emails' })}
+          ${renderReview({ data, mode: 'admin', canSeeUsage: true, depsKnown: this.depsKnown, stopped: this.stopped, emailsRoute: 'demo-emails', username: DEMO_USER.username, deleteScope: DELETING_MODE === 'on' ? 'all' : 'none', remover: DELETING_MODE === 'on' ? (this.demoRemover ??= createDemoRemover()) : null, onRemoved: this.onRemoved })}
         </div>
       </div>` : nothing}
       ${emails && data ? html`<app-emails demo .admin=${DEMO_ADMIN} orgId=${data.org.id} orgName=${data.org.name} writable></app-emails>` : nothing}`;
@@ -847,6 +859,25 @@ export class AppRoot extends LitElement {
     }
   }
 
+  /** ADR 0016: the session remover, only for a signed-in user whose build and privileges allow deleting (never the simulator). Built once per session. */
+  private removerFor: { manager: ArcGISIdentityManager; scope: string; remover: ItemRemover } | null = null;
+  private remover(): ItemRemover | null {
+    const m = this.manager, a = this.access, scope = a?.deleteScope;
+    if (!m || !a || (scope !== 'all' && scope !== 'own')) return null;
+    if (this.simulated) return (this.demoRemover ??= createDemoRemover(50)); // dev only: never touches anything
+    if (this.removerFor?.manager === m && this.removerFor.scope === scope) return this.removerFor.remover;
+    this.removerFor = { manager: m, scope, remover: createSessionRemover(m, { portal: PORTAL_URL, self: a.username, scope }) };
+    return this.removerFor.remover;
+  }
+  private demoRemover: ItemRemover | null = null;
+  /** ADR 0016: deleted layers leave the list on screen, the scan kept for Resume, and the saved scan. */
+  private onRemoved = (e: CustomEvent<{ ids: string[] }>): void => {
+    const ids = new Set(e.detail.ids);
+    if (this.data) this.data = pruneRemoved(this.data, ids);
+    if (this.demoData) this.demoData = pruneRemoved(this.demoData, ids);
+    if (this.lastEntry) this.lastEntry = { ...this.lastEntry, data: pruneRemoved(this.lastEntry.data, ids) };
+    if (this.access && !this.simulated && !this.demoOrg) void pruneCached(this.access, e.detail.ids);
+  };
   private renderSignedIn(view: 'app' | 'review' | 'emails') {
     if (this.busy || !this.access) return html`<p data-page="loading">${t('shell.access.loading')}</p>`;
     const a = this.access, data = this.data;
@@ -858,7 +889,7 @@ export class AppRoot extends LitElement {
       ${this.renderScanStatus()}
       <div data-scan-state=${this.stopped ? 'stopped' : this.background || this.flow.state === 'scanning' ? 'running' : 'done'} data-read-only=${String(!a.writable)}>
         ${!a.writable && a.mode !== 'my-items' ? html`<p role="note" data-note="read-only">${t('shell.access.readOnly')}</p>` : nothing}
-        ${renderReview({ data, mode: a.mode, canSeeUsage: canSeeUsage(a.usageReadable), username: a.username, note: this.noteText, refreshing: this.refreshing, depsKnown: this.depsKnown, stopped: this.stopped, rescan: this.rescanOffer, onRescan: this.rescan })}
+        ${renderReview({ data, mode: a.mode, canSeeUsage: canSeeUsage(a.usageReadable), username: a.username, note: this.noteText, refreshing: this.refreshing, depsKnown: this.depsKnown, stopped: this.stopped, rescan: this.rescanOffer, onRescan: this.rescan, deleteScope: a.deleteScope ?? 'none', remover: this.remover(), onRemoved: this.onRemoved })}
       </div>
       </div>` : nothing}
       ${view === 'emails' && !onScan ? html`<app-emails ?demo=${!!this.simulated} .manager=${this.manager} .admin=${{ name: a.fullName || a.username, username: a.username, ...(a.email !== undefined ? { email: a.email } : {}) }} orgId=${a.orgId} orgName=${a.orgName} ?writable=${a.writable}></app-emails>` : nothing}`;
@@ -933,7 +964,7 @@ export class AppRoot extends LitElement {
     return html`
       <calcite-shell @dc-selection-change=${(e: CustomEvent<{ owners: string[] }>) => { this.ticked = e.detail.owners.length; }}>
         <calcite-navigation slot="header" label=${t('shell.navigation.label')}>
-          <div slot="logo" class="dc-logo"><a class="dc-home" data-action="home" href=${hrefOf(homeRoute(this.route, this.signedIn))} aria-label=${t('shell.home.label')} @click=${this.goHome}><img src="${import.meta.env.BASE_URL}${this.consoleSkin ? 'brand-mark-console.svg' : 'brand-mark.svg'}" alt=""><span class="dc-name">Decluttering</span></a>${this.orgName ? html`<span class="dc-org">${this.orgName}</span>` : nothing}</div>
+          <div slot="logo" class="dc-logo"><a class="dc-home" data-action="home" href=${hrefOf(homeRoute(this.route, this.signedIn))} aria-label=${t('shell.home.label')} @click=${this.goHome}><img src="${import.meta.env.BASE_URL}${this.consoleSkin ? 'brand-mark-console.svg' : 'brand-mark.svg'}" alt=""><span class="dc-name">Decluttering</span></a>${this.orgName ? html`<span class="dc-org">${this.orgName}</span>` : nothing}<span class="dc-ver" data-version=${FEATURE_VERSION} title=${t('shell.version.title', { version: FEATURE_VERSION, commit: BUILD_COMMIT })}>v${FEATURE_VERSION} · ${BUILD_COMMIT} · ${t(DELETING_MODE === 'on' ? 'shell.version.deleteOn' : 'shell.version.deleteOff')}</span></div>
           <calcite-button slot="content-end" class="dc-about-link" data-action="about" appearance="transparent" kind="neutral" icon-start="information"
             href=${hrefOf('about')} label=${t('shell.about.label')} ?active=${this.route === 'about'}>${this.narrow ? nothing : t('shell.about.button')}</calcite-button>
           <button type="button" role="switch" slot="content-end" class="dc-skin-toggle" data-action="skin-toggle" aria-checked=${this.consoleSkin ? 'true' : 'false'}
@@ -946,6 +977,10 @@ export class AppRoot extends LitElement {
         <calcite-alert kind="success" icon="check-circle" auto-close auto-close-duration="medium" placement="bottom" label=${t('shell.notice.label')} .open=${this.offToast} @calciteAlertClose=${() => { this.offToast = false; }}>
           <div slot="message" data-toast="turn-off">${this.offToast ? TURN_OFF.done : nothing}</div>
         </calcite-alert>` : nothing}
+        ${this.newerBuild ? html`<div class="dc-update" role="status" data-update="available"><calcite-icon icon="refresh" scale="s" aria-hidden="true"></calcite-icon>
+          <span>${t('shell.update.text')}</span>
+          <calcite-button scale="s" data-action="update-reload" @click=${this.reloadNewer}>${t('shell.update.reload')}</calcite-button>
+          <calcite-button scale="s" appearance="transparent" kind="neutral" data-action="update-later" @click=${() => { this.newerBuild = null; }}>${t('shell.update.later')}</calcite-button></div>` : nothing}
         <main style="padding: 1.25rem 1.5rem; margin-inline: auto; max-width: ${this.route === 'app' ? '72rem' : this.route === 'emails' || this.route === 'demo-emails' ? '88rem' : '76rem'}">${this.renderSteps()}${body}</main>
       </calcite-shell>`;
   }

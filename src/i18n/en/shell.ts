@@ -1,6 +1,12 @@
 import type { Message } from './core';
 
 export const enShell = {
+  'shell.update.text': 'A new version of Decluttering is available. Reload to use it; your settings and sign-in stay, and the next scan starts fresh.',
+  'shell.update.reload': 'Reload',
+  'shell.update.later': 'Later',
+  'shell.version.title': 'Version {version}, commit {commit}',
+  'shell.version.deleteOn': 'deleting on',
+  'shell.version.deleteOff': 'deleting off',
   'shell.scan.stopAndReview': 'Stop and review what we have',
   'shell.scan.stopScanning': 'Stop scanning',
   'shell.scan.checkingBackground': 'Still checking in the background.',
@@ -114,6 +120,7 @@ export const enShell = {
   'tour.row.text': 'Each row says why it made the list and about how many credits a month it uses. The title opens it in ArcGIS Online.',
   'tour.tick.title': 'One email per owner',
   'tour.tick.text': 'Tick the owners you would like to nudge. Each gets a single friendly digest, and nothing is deleted.',
+  'tour.tick.text.deleting': 'Tick the owners you would like to nudge. Each gets a single friendly digest, and ticking an owner deletes nothing.',
   'tour.next.title': 'Then write the emails',
   'tour.next.text': 'Next: write the emails comes when you are ready. Nothing is sent until you choose.',
   'tour.next': 'Next',

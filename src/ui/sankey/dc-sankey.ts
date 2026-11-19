@@ -49,7 +49,7 @@ export class DcSankey extends LitElement {
       --_nudged: var(--dc-nudged, #34434f);
       --_clear-flow: var(--dc-dot-found, #b5c2cc);
     }
-    .chips { margin-block-end: 0.5rem; }
+    .chips { margin-block-end: 0.5rem; height: 28px; display: flex; align-items: center; }
     svg { width: 100%; height: auto; display: block; }
     text { font: 12px var(--dc-font-sans, system-ui, sans-serif); fill: var(--calcite-color-text-1, #151515); }
     .sub { fill: var(--calcite-color-text-3, #6a6a6a); }
@@ -64,7 +64,9 @@ export class DcSankey extends LitElement {
     .node .nm { fill: var(--calcite-color-text-link, #0063a3); }
     .node:hover .nm, .node:focus-visible .nm, .node.sel .nm { text-decoration: underline; }
     .node .chev { fill: none; stroke: var(--calcite-color-text-link, #0063a3); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-    .node .focus { fill: none; stroke: transparent; stroke-width: 2; }
+    /* The box is the click target: with no fill, SVG would only let the text and the thin bar take the click. */
+    .node .focus { fill: none; stroke: transparent; stroke-width: 2; pointer-events: all; }
+    .node.static .focus { pointer-events: none; }
     .node:focus-visible .focus { stroke: var(--calcite-color-brand, #007ac2); }
     .node.sel .focus { stroke: var(--calcite-color-brand, #007ac2); stroke-width: 1; }
     svg.hovering .node.dim { opacity: 0.35; }
@@ -113,9 +115,8 @@ export class DcSankey extends LitElement {
     const selected = shape.owners.find((o) => o.id === this.selected);
 
     return html`
-      ${selected && !selected.other ? html`<div class="chips">
-        <calcite-chip closable scale="s" kind="brand" appearance="outline-fill"
-          @calciteChipClose=${() => this.select(null)}>${selected.label}</calcite-chip></div>` : nothing}
+      <div class="chips">${selected && !selected.other ? html`<calcite-chip closable scale="s" kind="brand" appearance="outline-fill"
+          @calciteChipClose=${() => this.select(null)}>${selected.label}</calcite-chip>` : nothing}</div>
       <svg viewBox="0 0 ${W} ${H}" role="group" aria-label=${t('review.aria.chartCredits')}
         class=${this.hovered ? 'hovering' : ''}>
         <g>${graph.links.map((l) => {

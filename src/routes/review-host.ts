@@ -2,12 +2,18 @@
 import { LitElement, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { AccessMode } from '../auth/access';
+import { DELETING_MODE, mayDelete, type DeleteScope } from '../auth/deleting';
+import { familiesToRemove, type RemovalCandidate } from '../remove/plan';
+import type { ItemRemover } from '../remove/remover';
 import type { Data, OwnerGroup, Thresholds } from '../domain/types';
 import { PRESETS, evaluate } from '../domain/stale';
 import { visibleBrokenRefs } from '../domain/broken-refs';
 import '../ui/review/index';
 import type { SelectionDetail } from '../ui/review/index';
 import '../ui/review/dc-broken-refs';
+import '../ui/review/dc-delete-dialog';
+import type { DcReview } from '../ui/review/dc-review';
+import { deleteStatusOf, type DeleteStatus } from '../remove/selection';
 import '../ui/sankey/dc-sankey';
 import '@esri/calcite-components/dist/components/calcite-button';
 import '@esri/calcite-components/dist/components/calcite-dialog';
@@ -33,7 +39,9 @@ const setSolo = (v: boolean): void => { if (solo === v) return; solo = v; for (c
 
 export interface ReviewProps { data: Data; mode: AccessMode; canSeeUsage: boolean; username?: string; note?: string; refreshing?: boolean; depsKnown?: boolean; stopped?: boolean; emailsRoute?: Route;
   /** DC-105: Rescan is on offer (the show rule is in cache/rescan.ts); `ms` is the estimate, `measured` whether it came from the last full scan. */
-  rescan?: { ms: number; measured: boolean } | null; onRescan?: () => void }
+  rescan?: { ms: number; measured: boolean } | null; onRescan?: () => void;
+  /** ADR 0016: what the user may delete, how a delete is run, and what to do with the ids that are gone. Absent or `none`: nothing is offered. */
+  deleteScope?: DeleteScope; remover?: ItemRemover | null; onRemoved?: (e: CustomEvent<{ ids: string[] }>) => void }
 
 @customElement('app-review')
 export class AppReview extends LitElement {
@@ -52,6 +60,11 @@ export class AppReview extends LitElement {
   @property({ attribute: false }) rescan: { ms: number; measured: boolean } | null = null;
   @property({ attribute: false }) onRescan: (() => void) | undefined;
   @state() private rescanAsk = false;
+  /** ADR 0016. */
+  @property() deleteScope: DeleteScope = 'none';
+  @property({ attribute: false }) remover: ItemRemover | null = null;
+  /** The layers the open delete dialog is about, fixed when it opened (the data changes under it as they go). */
+  @state() private del: { open: boolean; items: RemovalCandidate[]; leftOut: number } = { open: false, items: [], leftOut: 0 };
   @state() private thresholds: Thresholds = { ...PRESETS.balanced };
   @state() private selected: string | null = null;
   /** DC-019: where "Next: write the emails" goes (#/emails, or #/demo/emails in the demo). */
@@ -164,6 +177,38 @@ export class AppReview extends LitElement {
     go(this.emailsRoute);
   };
 
+  /** The user may delete in principle (build, privileges, a remover). */
+  private get mayDeleteAtAll(): boolean { return !!this.remover && (this.deleteScope === 'all' || this.deleteScope === 'own'); }
+  /** What the delete bar says: hidden when the build has deleting off, else why it can or can't be used yet. */
+  private get deleteStatus(): DeleteStatus {
+    return deleteStatusOf({ buildOn: DELETING_MODE === 'on', mayDelete: this.mayDeleteAtAll, stopped: this.stopped, depsKnown: this.depsKnown, refreshing: this.refreshing });
+  }
+  /**
+   * Deleting waits for a finished scan: while maps and apps are still being read (or the scan was stopped), "used by" is unreliable,
+   * and a layer that looks unused might not be (ADR 0007, ADR 0016).
+   */
+  private get deleting(): boolean { return this.mayDeleteAtAll && this.depsKnown && !this.stopped && !this.refreshing; }
+  private canDelete = (owner: string): boolean => this.deleting && mayDelete(this.deleteScope, this.username, owner);
+  /** Opens the delete dialog for these source layer ids (from the item panel or the ticked rows). Only what the user may delete is listed. */
+  private askDelete = (ids: readonly string[]): void => {
+    if (!this.deleting) return;
+    const all = familiesToRemove(this.data, ids);
+    const items = all.filter((c) => this.canDelete(c.owner));
+    this.del = { open: true, items, leftOut: all.length - items.length };
+  };
+  /** ADR 0016: "Remove" on a layer in the confirm dialog: it leaves the dialog and the selection (the chart's or the list's). */
+  private onUnpick = (e: Event): void => {
+    const id = (e as CustomEvent<{ id: string }>).detail.id;
+    if (this.del.items.length < 2) return;
+    this.del = { ...this.del, items: this.del.items.filter((c) => c.id !== id) };
+    this.querySelector<DcReview>('dc-review')?.unpick(id);
+  };
+  private onDeleteRequest = (e: Event): void => { e.stopPropagation(); this.askDelete((e as CustomEvent<{ ids: string[] }>).detail.ids); };
+  private deleteDialog() {
+    if (!this.deleting) return nothing;
+    return html`<dc-delete-dialog .open=${this.del.open} .items=${this.del.items} .leftOut=${this.del.leftOut} .user=${this.username} .org=${this.data.org.name} .remover=${this.remover}
+      @dc-delete-unpick=${this.onUnpick} @dc-delete-close=${() => { this.del = { ...this.del, open: false }; }}></dc-delete-dialog>`;
+  }
   /** The action bar (admin only): what's ticked, and "Next: write the emails". */
   private actionBar() {
     if (this.mode !== 'admin' || this.selection.solo) return nothing;
@@ -197,7 +242,7 @@ export class AppReview extends LitElement {
     const owners = this.mode === 'my-items' ? [] : this.sankeyOwners(data, counting);
     return html`
       <section data-page="review" data-mode=${this.mode} data-deps-known=${String(this.depsKnown)}>
-        <dc-review .data=${data} .org=${data.org} .countSweeps=${counting} .since=${this.since(data, counting)}
+        <dc-review .data=${data} .org=${data.org} .deleteStatus=${this.deleteStatus} .canDelete=${this.deleting ? this.canDelete : undefined} @dc-delete-request=${this.onDeleteRequest} .countSweeps=${counting} .since=${this.since(data, counting)}
           @dc-count-sweeps=${(e: CustomEvent<boolean>) => setCountSweeps(data.org.id, e.detail)} .mode=${this.mode} .depsKnown=${this.depsKnown} .stopped=${this.stopped} .canSeeUsage=${this.canSeeUsage} .memberUsername=${this.username} .adminUsername=${this.mode === 'my-items' ? '' : this.username}
           @dc-thresholds-change=${(e: CustomEvent<Thresholds>) => { this.thresholds = e.detail; }}
           @dc-owner-select=${this.onSelect} @dc-selection-change=${this.onSelection}>
@@ -210,11 +255,12 @@ export class AppReview extends LitElement {
         </dc-review>
         <dc-broken-refs .refs=${visibleBrokenRefs(data, { depsComplete: this.depsKnown && !this.stopped, mode: this.mode })} .org=${data.org} .owners=${data.owners}></dc-broken-refs>
         ${this.rescanDialog()}
+        ${this.deleteDialog()}
         ${this.actionBar()}
       </section>`;
   }
 }
 
 export function renderReview(p: ReviewProps) {
-  return html`<app-review .data=${p.data} .mode=${p.mode} .canSeeUsage=${p.canSeeUsage} .username=${p.username ?? ''} .note=${p.note ?? ''} .refreshing=${!!p.refreshing} .depsKnown=${p.depsKnown ?? true} .stopped=${!!p.stopped} .emailsRoute=${p.emailsRoute ?? 'emails'} .rescan=${p.rescan ?? null} .onRescan=${p.onRescan}></app-review>`;
+  return html`<app-review .data=${p.data} .mode=${p.mode} .canSeeUsage=${p.canSeeUsage} .username=${p.username ?? ''} .note=${p.note ?? ''} .refreshing=${!!p.refreshing} .depsKnown=${p.depsKnown ?? true} .stopped=${!!p.stopped} .emailsRoute=${p.emailsRoute ?? 'emails'} .rescan=${p.rescan ?? null} .onRescan=${p.onRescan} .deleteScope=${p.deleteScope ?? 'none'} .remover=${p.remover ?? null} @dc-items-removed=${p.onRemoved ?? nothing}></app-review>`;
 }

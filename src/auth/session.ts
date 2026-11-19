@@ -3,6 +3,7 @@ import { ArcGISIdentityManager } from '@esri/arcgis-rest-request';
 import { accessMode, type AccessMode } from './access';
 import { CLIENT_ID, PORTAL_URL, redirectUri } from './config';
 import { buildMayOptIn } from './sending';
+import { deleteScope, type DeleteScope } from './deleting';
 import { oauthErrorMessage, parseOAuthError } from './oauth-error';
 import { clearUnlocks } from '../ui/emails/unlock';
 
@@ -20,6 +21,8 @@ export interface AccessInfo {
   usageReadable: boolean;
   /** ADR 0013: true only when this build lets an admin in this org turn sending on (VITE_SENDING). False means nothing may be sent or created. */
   writable: boolean;
+  /** ADR 0016: what this user may delete from Review. Absent or `none`: nothing is offered (this build has deleting off). */
+  deleteScope?: DeleteScope;
   /** The org's URL key and custom base URL host (portals/self), for links to items and people in the admin's own org. */
   urlKey?: string;
   customBaseUrl?: string;
@@ -141,6 +144,7 @@ export async function loadAccess(manager: ArcGISIdentityManager): Promise<Access
     role: u.role ?? '',
     usageReadable,
     writable: buildMayOptIn(self.id ?? ''),
+    deleteScope: deleteScope(u.privileges),
     ...(self.urlKey ? { urlKey: self.urlKey } : {}),
     ...(self.customBaseUrl ? { customBaseUrl: self.customBaseUrl } : {}),
     ...(u.thumbnail ? { thumbnail: u.thumbnail } : {}),

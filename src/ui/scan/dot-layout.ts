@@ -30,9 +30,22 @@ export function xUpdate(days: number, i: number): number {
 // How stale, up (DC-083): time since last used. "No use recorded" is its own band at the top; the rest piecewise.
 export const Y_BAND: [number, number] = [0.9, 0.985];
 const Y_STOPS: [number, number][] = [[0, 0.03], [30, 0.14], [90, 0.3], [180, 0.47], [365, 0.66], [730, 0.84]];
-/** Plot fraction for a last use `days` ago (no jitter). Beyond 2 years it stays just under the top band. */
-export function yLastUsed(days: number): number {
+/**
+ * The vertical scale on "How stale". `standard`: the piecewise one above (months and years read evenly). `log-weeks`:
+ * logarithmic in weeks, log(1 + weeks), so the recent end (most layers were used in the last weeks) spreads out instead of
+ * piling up at the bottom. Both keep "no use recorded" in its own top band.
+ */
+export type YScale = 'standard' | 'log-weeks';
+export const Y_SCALES: readonly YScale[] = ['standard', 'log-weeks'];
+/** The log scale reaches its top at 4 years: Esri's lastViewed goes back to about November 2022. */
+export const LOG_WEEKS_MAX = 208;
+const Y_LO = 0.03, Y_HI = 0.88;
+/** Where the log scale puts its ticks: days, and the weeks they are labelled with. */
+export const LOG_WEEK_TICKS: readonly [days: number, weeks: number][] = [[7, 1], [14, 2], [28, 4], [91, 13], [182, 26], [364, 52], [728, 104]];
+/** Plot fraction for a last use `days` ago (no jitter). Beyond 2 years (standard) or 4 years (log) it stays just under the top band. */
+export function yLastUsed(days: number, scale: YScale = 'standard'): number {
   const d = Math.max(0, days);
+  if (scale === 'log-weeks') return Math.min(Y_HI, Y_LO + (Y_HI - Y_LO) * Math.log1p(d / 7) / Math.log1p(LOG_WEEKS_MAX));
   for (let k = 1; k < Y_STOPS.length; k++) {
     const a = Y_STOPS[k - 1] as [number, number], b = Y_STOPS[k] as [number, number];
     if (d <= b[0]) return a[1] + (d - a[0]) / (b[0] - a[0]) * (b[1] - a[1]);
@@ -40,9 +53,9 @@ export function yLastUsed(days: number): number {
   return Math.min(0.88, 0.84 + (d - 730) / 730 * 0.04);
 }
 /** A dot's height: null (no use recorded, or none in the year read) sits in the top band, jittered so they don't pile up. */
-export const yUsedAgo = (days: number | null, i: number): number => (days === null
+export const yUsedAgo = (days: number | null, i: number, scale: YScale = 'standard'): number => (days === null
   ? Y_BAND[0] + hash(i, 2) * (Y_BAND[1] - Y_BAND[0])
-  : clamp(yLastUsed(days) + (hash(i, 2) - 0.5) * 0.012, 0.01, 0.89));
+  : clamp(yLastUsed(days, scale) + (hash(i, 2) - 0.5) * 0.012, 0.01, 0.89));
 
 /** Staleness is capped at 1, so the very stale pile up at the top: spread them through a top band instead. */
 export const yStale = (staleness: number, i: number): number => (staleness >= 0.97
@@ -61,24 +74,24 @@ export const xUsed = (usedBy: number, i: number): number => (Math.min(3, usedBy)
 /** A dot's place on a lens, as plot fractions (x right, y up). */
 export function lensPoint(
   lens: LensId, d: { usedBy: number; lastUsedDaysAgo: number | null; daysSinceUpdate: number; sizeMB: number; staleness: number }, i: number,
-  _t: Thresholds, maxMB: number,
+  _t: Thresholds, maxMB: number, scale: YScale = 'standard',
 ): [number, number] {
-  if (lens === 'stale') return [xUpdate(d.daysSinceUpdate, i), yUsedAgo(d.lastUsedDaysAgo, i)];
+  if (lens === 'stale') return [xUpdate(d.daysSinceUpdate, i), yUsedAgo(d.lastUsedDaysAgo, i, scale)];
   if (lens === 'big') return [xSize(d.sizeMB, i, maxMB), yStale(d.staleness, i)];
   return [xUsed(d.usedBy, i), yStale(d.staleness, i)];
 }
 
 /** The stale zone on "How stale": from minDaysSinceUpdate across, and from minDaysSinceUse up (plot fractions). */
-export function staleZone(t: Thresholds): { x: number; y: number } {
-  return { x: xUpdate(t.minDaysSinceUpdate, 0), y: yLastUsed(t.minDaysSinceUse) };
+export function staleZone(t: Thresholds, scale: YScale = 'standard'): { x: number; y: number } {
+  return { x: xUpdate(t.minDaysSinceUpdate, 0), y: yLastUsed(t.minDaysSinceUse, scale) };
 }
 
 /** FB-63 (DC-106): the stale zone's box in canvas pixels, for a plot of `plot` with `inset` pixels of margin. `left` is the dashed border's
  *  x, snapped to a pixel centre. It is always inside the drawable area (the plot's left edge to its right edge), for any threshold. */
 export function zoneBox(
-  plot: { x0: number; y0: number; w: number; h: number }, inset: number, t: Thresholds,
+  plot: { x0: number; y0: number; w: number; h: number }, inset: number, t: Thresholds, scale: YScale = 'standard',
 ): { left: number; right: number; top: number; bottom: number } {
-  const z = staleZone(t);
+  const z = staleZone(t, scale);
   const gx = (n: number) => plot.x0 + inset + n * (plot.w - 2 * inset), gy = (n: number) => plot.y0 + inset + (1 - n) * (plot.h - 2 * inset);
   const right = plot.x0 + plot.w - 2;
   const left = Math.min(right - 1, Math.max(plot.x0 + 1, Math.round(gx(z.x) - 0.5) + 0.5));

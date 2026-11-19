@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "clean": "node scripts/clean.mjs"
   },
   "dependencies": {
     "@esri/arcgis-rest-request": "^4.11.0",

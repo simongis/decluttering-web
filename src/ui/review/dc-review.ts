@@ -1,10 +1,13 @@
 import { LitElement, html, nothing, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { LocaleController } from '../../i18n/controller';
-import { t } from '../../i18n';
+import { formatNumber, t, tn } from '../../i18n';
+import { deletingCopy } from '../shared/deleting-copy';
 import '@esri/calcite-components/dist/components/calcite-block';
 import '@esri/calcite-components/dist/components/calcite-button';
 import '@esri/calcite-components/dist/components/calcite-chip';
+import '@esri/calcite-components/dist/components/calcite-checkbox';
+import '@esri/calcite-components/dist/components/calcite-label';
 import '@esri/calcite-components/dist/components/calcite-icon';
 import '@esri/calcite-components/dist/components/calcite-link';
 import '@esri/calcite-components/dist/components/calcite-notice';
@@ -16,8 +19,9 @@ import './dc-owner-list';
 import './dc-since-nudges';
 import '../scan/dc-dot-map';
 import type { DotModel } from '../scan/dots';
+import { SMALL_LAYER_MB } from '../scan/dots';
 import { readChartOpen, readChartView, reviewDots, writeChartOpen, writeChartView, zoneName, type ChartView } from './review-dots';
-import type { Data, EvaluateResult, Org, OwnerGroup, Thresholds } from '../../domain/types';
+import type { Data, EvaluateResult, Org, OwnerGroup, Row, Service, Thresholds } from '../../domain/types';
 import { PRESETS, PRESET_NAMES, evaluate, matchPreset, sizeChangeImpact, statusToggles, sweepsOf, type PresetName, type SizeImpact } from '../../domain/stale';
 import { suggest, type Suggestion } from '../../domain/suggest';
 import { sweepNote, sweepSummary } from '../../domain/sweep';
@@ -30,6 +34,8 @@ import { noOneToNudge } from '../../domain/solo';
 
 export type ReviewMode = 'admin' | 'admin-cant-send' | 'my-items';
 /** `solo` (DC-103): every owner the rule flags is the signed-in admin, so there is no one to nudge and no Emails step. */
+import { addPicked, chosenOf, keepPresent, togglePicked, waitReason, type DeleteStatus, type RectResult } from '../../remove/selection';
+export type { DeleteStatus } from '../../remove/selection';
 export interface SelectionDetail { owners: string[]; items: string[]; services: number; credits: number; solo?: boolean }
 
 const DONE_KEY = 'decluttering:done';
@@ -48,7 +54,7 @@ const sameT = (a: Thresholds, b: Thresholds) => T_KEYS.every((k) => (a[k] ?? 0) 
 export const SOLO_NOTE = "You're the only owner here, so there's no one to nudge. Here's your own list to tidy, biggest first.";
 
 const appLink = () => location.origin + location.pathname.replace(/[^/]*$/, '');
-const adminNote = () => t('review.admin.note', { url: appLink() });
+const adminNote = () => t(deletingCopy('review.admin.note', 'review.admin.note.deleting'), { url: appLink() });
 
 /**
  * The review screen: summary, filters, owner list (or one list in member mode), "No one to nudge".
@@ -66,6 +72,13 @@ export class DcReview extends LitElement {
   @property({ attribute: false }) org!: Org;
   @property() mode: ReviewMode = 'admin';
   @property({ type: Boolean, attribute: 'can-see-usage' }) canSeeUsage = true;
+  /** ADR 0016: whether the signed-in user may delete a layer owned by this username. Absent: the item panel offers no delete. */
+  @property({ attribute: false }) canDelete: ((owner: string) => boolean) | undefined;
+  /** ADR 0016: the layers chosen for deleting. Its own choice, apart from the email ticks, so it works in every mode. */
+  @state() private delSel: ReadonlySet<string> = new Set();
+  /** ADR 0016: what the last rectangle did, shown by the chart until the selection is cleared or another rectangle is drawn. */
+  @state() private rectNote: Omit<RectResult, 'next'> | null = null;
+  @property() deleteStatus: DeleteStatus = 'off';
   @property({ attribute: false }) thresholds: Thresholds = { ...PRESETS.balanced };
   /** False while maps and apps are still being read: used-by is unknown, so that rule is skipped. */
   @property({ type: Boolean }) depsKnown = true;
@@ -193,6 +206,7 @@ export class DcReview extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues): void {
+    if (changed.has('data') && this.delSel.size) this.delSel = keepPresent(this.delSel, new Set((this.data?.services ?? []).map((s) => s.id)));
     if (changed.has('data') || changed.has('depsKnown') || changed.has('countSweeps')) this.applySuggestion();
     if (changed.has('data') || changed.has('thresholds') || changed.has('countSweeps') || changed.has('canSeeUsage') || changed.has('mode') || changed.has('memberUsername') || changed.has('depsKnown') || changed.has('adminUsername')) {
       this.ev = this.evaluateNow();
@@ -365,8 +379,10 @@ export class DcReview extends LitElement {
         <calcite-segmented-control-item value="owner" ?checked=${view === 'owner'}>${t('review.sankey.byOwner')}</calcite-segmented-control-item>
       </calcite-segmented-control>
       <div class="chart-view" data-view="stale" ?hidden=${view !== 'stale'}>
+        ${m ? this.chartSelection() : nothing}
         ${m ? html`<dc-dot-map .model=${m} .org=${this.org} .thresholds=${this.dotsT ?? this.effective()} .lenses=${STALE_ONLY} .zoneLabel=${zoneName(shown)}
-          lenses-ready height-scale="0.9" data-stale-services=${inZone}></dc-dot-map>` : nothing}
+          lenses-ready scale-switch height-scale="0.9" data-stale-services=${inZone} ?actions=${this.deleteStatus !== 'off'} ?selectable=${this.deleteStatus === 'ready'} .selected=${this.delSel}
+          .deleteWhy=${this.deleteStatus === 'off' ? undefined : this.dotDeleteWhy} @dc-dots-select=${this.onDotsSelect} @dc-delete-pick=${this.onDeletePick}></dc-dot-map>` : nothing}
       </div>
       <div class="chart-view chart-slot" data-view="owner" ?hidden=${view !== 'owner'}></div>
     </calcite-block>`;
@@ -392,7 +408,7 @@ export class DcReview extends LitElement {
     return html`<calcite-block class="nudge" heading=${t('review.nudge.heading')} expanded>
       <calcite-icon slot="icon" icon="group" scale="s"></calcite-icon>
       <div class="block-pad">
-        <p class="mi-p">${t('review.nudge.body')}</p>
+        <p class="mi-p">${t(deletingCopy('review.nudge.body', 'review.nudge.body.deleting'))}</p>
         <calcite-button icon-start="copy" appearance="outline" width="full" @click=${() => this.copyNote()}>${t('review.nudge.copy')}</calcite-button>
         <p class="hint">${t('review.nudge.hint')}</p>
         ${this.toast ? html`<calcite-notice open scale="s" kind="success" icon="check-circle" class="toast"><div slot="message">${this.toast}</div></calcite-notice>` : nothing}
@@ -426,7 +442,7 @@ export class DcReview extends LitElement {
     const list = !everyone.length ? this.emptyState() : html`<dc-owner-list .owners=${owners} .org=${this.org} .thresholds=${this.thresholds}
       .items=${this.items} .done=${this.done} .filterOwner=${this.filterOwner} .sort=${this.activeSort} ?selectable=${this.selectable} ?member=${personal}
       .canSeeUsage=${this.canSeeUsage} .depsKnown=${this.depsKnown} .stopped=${this.stopped} .nudgeNotes=${this.nudgeNotes()}
-      .data=${this.data} .countSweeps=${this.countSweeps}></dc-owner-list>`;
+      .data=${this.data} .countSweeps=${this.countSweeps} .canDelete=${this.canDelete} .delSel=${this.delSel} @dc-delete-pick=${this.onDeletePick}></dc-owner-list>`;
     const startNone = this.startOnly && !owners.length && everyone.length > 0;
 
     const notes = [this.depsNote(), this.sizesNote(owners), this.useNote(), this.sweepNote()].filter((n) => n !== nothing);
@@ -457,10 +473,115 @@ export class DcReview extends LitElement {
           ${fo ? html`<calcite-chip closable scale="m" appearance="outline-fill" kind="brand" @calciteChipClose=${() => { this.filterOwner = null; }}>${t('review.label.owner', { name: fo.owner.fullName })}</calcite-chip>` : nothing}</div>
         ${everyone.length ? this.sortControl() : nothing}
         ${startNone ? html`<p class="lede">${t('review.sort.noneQuick')}</p>` : nothing}
+        ${this.deleteBar(filtered)}
         ${list}
         ${member ? nothing : this.unreachable(ev)}
       </div>
       ${member ? html`<aside class="mi-side" aria-label=${t('review.nudge.shareAria')}>${this.nudgePanel()}</aside>` : nothing}
+    </div>`;
+  }
+
+  /** ADR 0016: the rows on the list this user may delete. */
+  private deletableRows(shown: OwnerGroup[]): Row[] {
+    const can = this.canDelete;
+    return can ? shown.flatMap((o) => o.rows).filter((r) => can(r.source.owner)) : [];
+  }
+  /** A row's "Select to delete", or "Add to / Remove from selection" in a dot's menu. */
+  private onDeletePick = (e: Event): void => {
+    e.stopPropagation();
+    const { id, checked } = (e as CustomEvent<{ id: string; checked: boolean }>).detail;
+    this.delSel = togglePicked(this.delSel, id, checked, this.deletableById());
+  };
+  /** ADR 0016: takes one layer out of the delete selection (the confirm dialog's Remove). */
+  unpick(id: string): void { this.delSel = togglePicked(this.delSel, id, false, this.deletableById()); }
+  private clearPicked = (): void => { this.delSel = new Set(); this.rectNote = null; };
+  /** ADR 0016: the services this user may delete, by id (sources only: a view goes with its source). */
+  private deletableById(): Map<string, Service> {
+    const can = this.canDelete, out = new Map<string, Service>();
+    if (!can || !this.data) return out;
+    for (const s of this.data.services) if (!s.isView && can(s.owner)) out.set(s.id, s);
+    return out;
+  }
+  /** ADR 0016: why a dot on the chart can't be deleted ('' when it can), for its menu. */
+  private dotDeleteWhy = (id: string): string => {
+    const st = this.deleteStatus;
+    if (st === 'no-privilege') return t('review.delete.noPrivilege');
+    if (st === 'stopped') return t('review.delete.waitingStopped');
+    if (st === 'waiting') return t('review.delete.waiting');
+    return this.deletableById().has(id) ? '' : t('review.delete.reason.not-allowed');
+  };
+  /** ADR 0016: a rectangle on the chart adds the layers in it that this user may delete, and says what it left out. */
+  private onDotsSelect = (e: Event): void => {
+    e.stopPropagation();
+    if (this.deleteStatus !== 'ready') return;
+    const det = (e as CustomEvent<{ ids: string[]; hidden?: string[] }>).detail;
+    const r = addPicked(this.delSel, det.ids, this.deletableById(), det.hidden ?? []);
+    this.rectNote = r.inRect || r.hidden.length ? { inRect: r.inRect, added: r.added, dropped: r.dropped, hidden: r.hidden } : null;
+    if (r.added) this.delSel = r.next;
+  };
+  private rectLine() {
+    // Always drawn (empty when there is nothing to say), so the chart below never jumps while the user is drawing.
+    const r = this.rectNote;
+    if (!r) return html`<span class="chart-sel-note" data-rect-note></span>`;
+    const parts = [
+      r.added ? tn('review.delete.rect.added', r.added, { count: formatNumber(r.added) }) : r.dropped ? t('review.delete.rect.none') : r.inRect ? t('review.delete.rect.already') : '',
+      r.dropped ? tn('review.delete.rect.dropped', r.dropped, { count: formatNumber(r.dropped) }) : '',
+    ].filter(Boolean).join(' ');
+    const h = r.hidden.length;
+    return html`<span class="chart-sel-note ${r.dropped ? 'warn' : ''}" data-rect-note>${parts}${h ? html`${parts ? ' ' : ''}<span data-rect-hidden>${tn('review.delete.rect.hidden', h, { count: formatNumber(h), mb: SMALL_LAYER_MB })}</span>
+      <button type="button" class="dm-link" data-action="rect-include-hidden" @click=${this.includeHidden}>${tn('review.delete.rect.includeHidden', h, { count: formatNumber(h) })}</button>` : nothing}</span>`;
+  }
+  /** Adds the small layers the last rectangle covered but the chart doesn't draw. */
+  private includeHidden = (): void => {
+    const r = this.rectNote;
+    if (!r?.hidden.length) return;
+    const add = addPicked(this.delSel, r.hidden, this.deletableById());
+    this.delSel = add.next;
+    this.rectNote = { ...r, added: r.added + add.added, hidden: [] };
+  }
+  /** ADR 0016: right under the chart, so a rectangle's result is seen where it was drawn: the count, Clear and Delete selected. */
+  private chartSelection() {
+    if (this.deleteStatus !== 'ready') return nothing;
+    const { ids, sizeMB } = chosenOf(this.delSel, this.deletableById());
+    const n = ids.length;
+    return html`<div class="chart-sel" data-chart-sel role="status">
+      <b data-chart-sel-count>${n ? `${tn('review.delete.selected', n, { count: formatNumber(n) })}${sizeMB !== null ? ` · ${formatMB(sizeMB)}` : ''}` : t('review.delete.noneSelected')}</b>
+      <calcite-button data-action="chart-sel-clear" appearance="transparent" kind="neutral" scale="s" ?disabled=${n === 0} @click=${this.clearPicked}>${t('review.delete.clear')}</calcite-button>
+      <calcite-button data-action="chart-sel-delete" kind="danger" scale="s" icon-start="trash" ?disabled=${n === 0}
+        @click=${() => this.dispatchEvent(new CustomEvent('dc-delete-request', { detail: { ids }, bubbles: true, composed: true }))}>${t('review.delete.bulk')}</calcite-button>
+      ${this.rectLine()}
+    </div>`;
+  }
+  /** ADR 0016: the delete bar. "Select all" for the list, everything chosen (list and chart), Clear, and Delete selected. */
+  private deleteBar(shown: OwnerGroup[]) {
+    const st = this.deleteStatus;
+    if (st === 'off') return nothing;
+    const head = html`<span class="del-title"><calcite-icon icon="trash" scale="s" aria-hidden="true"></calcite-icon>${t('review.delete.barLabel')}</span>`;
+    const why = waitReason(st);
+    if (why) {
+      return html`<div class="del-bar" data-bar="delete-select" data-delete-status=${st} role="region" aria-label=${t('review.delete.barLabel')}>
+        ${head}<span class="del-sum" role="status" data-del-why>${t(why)}</span></div>`;
+    }
+    const rows = this.deletableRows(shown);
+    const { ids: chosen, sizeMB, off } = chosenOf(this.delSel, this.deletableById(), new Set(rows.map((r) => r.source.id)));
+    const n = chosen.length;
+    const listChosen = rows.filter((r) => this.delSel.has(r.source.id)).length;
+    const all = rows.length > 0 && listChosen === rows.length;
+    const size = sizeMB !== null ? ` · ${formatMB(sizeMB)}` : '';
+    const hasChart = !this.member && !!this.dots;
+    const empty = rows.length ? t('review.delete.pickNone') : hasChart ? t('review.delete.noneOnListChart') : t('review.delete.noneOnList');
+    return html`<div class="del-bar" data-bar="delete-select" data-delete-status="ready" role="region" aria-label=${t('review.delete.barLabel')}>
+      ${head}
+      ${rows.length ? html`<calcite-label layout="inline" class="del-all"><calcite-checkbox data-action="del-all" .checked=${all} .indeterminate=${listChosen > 0 && !all}
+        @calciteCheckboxChange=${(e: Event) => {
+          const on = (e.target as HTMLInputElement).checked, next = new Set(this.delSel);
+          for (const r of rows) { if (on) next.add(r.source.id); else next.delete(r.source.id); }
+          this.delSel = next;
+        }}></calcite-checkbox>${t('review.delete.pickAll', { count: formatNumber(rows.length) })}</calcite-label>` : nothing}
+      <span class="del-sum" role="status" data-del-count>${n ? `${tn('review.delete.selected', n, { count: formatNumber(n) })}${size}` : empty}${off ? html`<span class="del-off" data-del-off> · ${tn('review.delete.offList', off, { count: formatNumber(off) })}</span>` : nothing}</span>
+      ${n ? html`<calcite-button data-action="delete-clear" appearance="transparent" kind="neutral" scale="s" @click=${this.clearPicked}>${t('review.delete.clear')}</calcite-button>` : nothing}
+      <calcite-button data-action="delete-selected" kind="danger" icon-start="trash" ?disabled=${n === 0}
+        @click=${() => this.dispatchEvent(new CustomEvent('dc-delete-request', { detail: { ids: chosen }, bubbles: true, composed: true }))}>${t('review.delete.bulk')}</calcite-button>
     </div>`;
   }
 

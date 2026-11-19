@@ -1,5 +1,6 @@
 // DC-113 (FB-69): the tour's steps. Copy is short and warm (docs/research/copy-pass.md): two sentences at most.
 import { onLocaleChange, t } from '../../i18n';
+import { deletingCopy } from '../shared/deleting-copy';
 // Targets are light-DOM elements that already exist (calcite hosts and our wrappers), so no shadow-DOM piercing is needed.
 
 export type TourStepId = 'chart' | 'rules' | 'row' | 'tick' | 'next';
@@ -19,7 +20,7 @@ function tourSteps(): readonly TourStep[] {
     { id: 'chart', selector: '.chart-block', side: 'bottom', title: t('tour.chart.title'), text: t('tour.chart.text') },
     { id: 'rules', selector: '.dc-review-side', side: 'right', title: t('tour.rules.title'), text: t('tour.rules.text') },
     { id: 'row', selector: 'dc-owner-list [data-card] calcite-list-item', side: 'top', title: t('tour.row.title'), text: t('tour.row.text') },
-    { id: 'tick', selector: 'dc-owner-list [data-card] .owner-foot', side: 'top', needsPeople: true, title: t('tour.tick.title'), text: t('tour.tick.text') },
+    { id: 'tick', selector: 'dc-owner-list [data-card] .owner-foot', side: 'top', needsPeople: true, title: t('tour.tick.title'), text: t(deletingCopy('tour.tick.text', 'tour.tick.text.deleting')) },
     { id: 'next', selector: '[data-bar="review"]', side: 'top', needsPeople: true, title: t('tour.next.title'), text: t('tour.next.text') },
   ];
 }

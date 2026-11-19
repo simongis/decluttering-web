@@ -4,13 +4,13 @@
 
 ### [**Open the app →**](https://simongis.github.io/decluttering-web/)
 
-Decluttering finds the hosted feature layers in your org that nobody seems to use, shows you why each one was picked out and what it costs in credits, and helps you send each owner **one friendly email** about them. Owners decide what happens to their own layers. The app **never deletes, moves or changes anyone's items**.
+Decluttering finds the hosted feature layers in your org that nobody seems to use, shows you why each one was picked out and what it costs in credits, and helps you send each owner **one friendly email** about them. Owners decide what happens to their own layers. The app **never moves or changes anyone's items**, and it **only deletes** when a build has deleting turned on (it is off unless `VITE_DELETING=on`) and you confirm each delete yourself (see [Deleting layers](#deleting-layers-off-by-default)).
 
 It runs entirely in your browser. There is no Decluttering server, and nothing goes anywhere except your own ArcGIS Online org.
 
 > **Try it without signing in:** open the site and choose **Try the demo**. It plays a full scan of a made-up council's org, then lets you review the results and write the emails. Nothing is sent and nothing leaves your browser.
 
-> **New, and built by one person.** Decluttering is version 1, so treat it as early days. Scanning and review only read your org. Emails go out only after you turn sending on and send yourself a test, and the app never deletes, moves or changes anyone's items. It's provided as is (see [Disclaimer](#disclaimer)); please [raise an issue](https://github.com/simongis/decluttering-web/issues) if something looks off. Ideas, feedback and collaborators are very welcome (see [Contributing and support](#contributing-and-support)).
+> **New, and built by one person.** Decluttering is version 1, so treat it as early days. Scanning and review only read your org. Emails go out only after you turn sending on and send yourself a test, and the app never moves or changes anyone's items. Deleting is off unless a build turns it on (see [Deleting layers](#deleting-layers-off-by-default)). It's provided as is (see [Disclaimer](#disclaimer)); please [raise an issue](https://github.com/simongis/decluttering-web/issues) if something looks off. Ideas, feedback and collaborators are very welcome (see [Contributing and support](#contributing-and-support)).
 
 ![Review: the rule on the left, the stale zone chart and the owners on the right](docs/images/review.png)
 
@@ -62,6 +62,8 @@ flowchart TD
     style P fill:#fbe9ef,stroke:#b01f59
     style K fill:#eaf6ef,stroke:#2f7d4f
 ```
+
+On Review, the chart's **Vertical scale** switch offers **Log, in weeks**: most layers were used in the last few weeks, and on the standard scale they pile up near "today"; the log scale spreads them out (1, 2, 4, 13, 26, 52 and 104 weeks). The choice is remembered in your browser.
 
 You can see and change every number. Starting points fill them in:
 
@@ -150,6 +152,43 @@ flowchart LR
 
 ![Your data: your browser talks only to your own ArcGIS Online org](docs/images/about-data.png)
 
+## Deleting layers (off by default)
+
+Some layers are better gone: old copies, abandoned projects, layers that take a lot of storage. A build made with `VITE_DELETING=on` lets you delete them from Review, with the ArcGIS Online account you signed in with. Every other build never offers or sends a delete.
+
+![The Review chart: a rectangle has selected 14 layers (red rings); a click on a dot asks whether to view or delete it](docs/images/delete-chart.png)
+
+### Choosing what to delete
+
+- **On the chart:** drag a rectangle over the dots. Every layer inside it is added to the delete selection, **whether or not it meets the rule**. The chart shows all your layers; the list only shows those the rule picks out. Each rectangle adds to the selection and says how many it added, and how many it left out because you can't delete them. A dot counts as soon as any of it is inside, so the dot you start dragging on is taken. Selected layers get a red ring.
+  - In an org with more than 150 layers the chart doesn't draw layers under 3 MB (unless you choose to show them). A rectangle says how many of those are in its area, and **Include them** adds them too.
+- **Click a dot** to choose **View item** (opens it in ArcGIS Online, in a new tab), **Add to / Remove from selection**, or **Delete…** (just that layer). From the keyboard: arrow keys move between dots, Enter opens the same choice, Escape closes it.
+- **On the list:** every layer row has **Select to delete** and a **Delete…** button. The bar above the list has **Select all**, the number of layers and the storage selected (and how many are outside the list), **Clear selection** and **Delete selected…**. The same count and buttons sit right above the chart.
+- **In a layer's panel:** **Delete…**.
+
+The delete selection is separate from the email ticks, so it works for every access level.
+
+### What protects you
+
+![The confirm dialog: each layer with its owner and size, a warning when a map uses it, the storage it frees, and the word to type](docs/images/delete-dialog.png)
+
+- **Confirmed every time.** The dialog lists each layer with its owner, size and views (they are deleted with it), lets you **Remove** any of them from this delete, warns when a map or app still uses it, names the account doing the delete, and asks you to type `DELETE` (`BORRAR` in Spanish).
+- **Never permanent.** The app sends a normal delete, never `permanentDelete`, so the ArcGIS Online recycle bin applies where the org has one. Layers with delete protection are skipped and reported.
+- **Checked first.** Just before deleting, the app reads each layer again and skips it if it is no longer a hosted feature layer, has a different owner, or is protected. A delete counts only when ArcGIS Online confirms it.
+- **Only on a finished scan.** Selecting and deleting switch on once maps and apps have been checked, so "used by" can be trusted. Until then the delete bar says why it is waiting.
+- **Your privileges decide.** With Esri's *Create, update, and delete content* privilege (`portal:user:createItem`) you can delete your own layers. With *Delete items* (`portal:admin:deleteItems`) you can delete anyone's. Without either, the delete bar says so. ArcGIS Online enforces its own rules either way.
+- **Its own allow-list.** Deleting can make only two calls, an item read and the delete (`src/remove/guard.ts`). The scan stays read-only.
+
+After a delete, the layers leave the list, the chart and the saved scan. Maps and apps that used a deleted layer are checked again on your next scan.
+
+**Keep a record.** ArcGIS Online doesn't tell owners when an admin deletes their layers, and the app keeps no record (it has no server). The result has **Download report (CSV)**: one row per layer with when, who, the owner, size, views, the result and the reason when it wasn't deleted. Use it to keep a record or to tell the owners. Text that a spreadsheet would run as a formula is defused.
+
+The app's own wording follows the build: with deleting off it promises it never deletes (About, the tour, the note for your admin) and the demo shows no delete; with it on, those say layers are deleted only when someone chooses them and confirms, and the demo shows the whole flow without touching anything. The design is in [ADR 0016](docs/adr/0016-deleting-layers.md), and a manual test plan for a real org is in [docs/testing/deleting.md](docs/testing/deleting.md).
+
+### Which version am I looking at?
+
+The header shows the version, the commit and whether this build can delete, for example `v1.4.0-dev.6 · bb2b03c · deleting on`. The `-dev.N` part counts changes on an unreleased branch. A `+` after the commit means the copy had uncommitted changes. If it says `deleting off`, set `VITE_DELETING=on` and restart the dev server.
+
 ## Sending is switched on by each admin
 
 Anyone can sign in and review. Sending is off until **you** turn it on for yourself, inside the app:
@@ -187,8 +226,13 @@ npm run dev               # http://localhost:5173
 
 1. **Register the app in ArcGIS Online.** Content › New item › Developer credentials › OAuth 2.0 credentials. Add the redirect URLs `http://localhost:5173/` and your site's address (for example `https://<you>.github.io/decluttering-web/`). Put the client ID in `VITE_ARCGIS_CLIENT_ID`. It is public by design; there is no secret.
 2. **Choose where sending can be turned on** with `VITE_SENDING`: empty or `off` (review-only), `list` (only the org ids in `VITE_WRITABLE_ORG_IDS`) or `opt-in` (any org; each admin turns it on for themselves).
+3. **Optionally turn on deleting** with `VITE_DELETING=on` (see [Deleting layers](#deleting-layers-off-by-default)). Empty or anything else means off.
 
-Checks: `npm run typecheck && npm run lint && npm test && npm run e2e`.
+The redirect URL must match exactly, port included. `npm run dev` always uses port 5173 and stops with an error if it is taken (another dev server is running), instead of moving to 5174, where sign-in would fail with *Invalid redirect_uri*.
+
+Checks: `npm run typecheck && npm run lint && npm test && npm run e2e`. `npm run e2e` always builds and serves this checkout (it never reuses a server already on the port, which could be an older build). `npm run clean` removes every build and test output and Vite's dependency cache; stop the dev server first.
+
+**Updates.** Every build and every dev-server start has its own id, published as `version.json`. An open tab checks it on load, every 5 minutes and when you come back to it; when a newer build is served it offers **Reload** (never automatic, so a scan, a send or a delete is not cut off). The reload skips a cached `index.html`. The first load of a new build clears the saved scan, which the old build wrote; sign-in and settings stay, so the next scan starts fresh.
 
 ### Deploy to GitHub Pages
 
@@ -197,12 +241,20 @@ Checks: `npm run typecheck && npm run lint && npm test && npm run e2e`.
 1. Settings › Pages › Source: **GitHub Actions**.
 2. Settings › Secrets and variables › Actions › **Variables**:
    - `VITE_ARCGIS_CLIENT_ID` (required)
+   - `VITE_SENDING` (optional: `off`, `list` or `opt-in`; unset means off)
+   - `VITE_DELETING` (optional: `on` lets users delete layers from Review; unset means off)
 
 ## Built with
 
 [Calcite Design System](https://developers.arcgis.com/calcite-design-system/), [ArcGIS REST JS](https://developers.arcgis.com/arcgis-rest-js/), [Lit](https://lit.dev/), [D3](https://d3js.org/) and [Driver.js](https://driverjs.com/), with Vite and TypeScript. Third-party notices: `LICENSES.md`.
 
 ## Version
+
+**Unreleased** (branch `feat/delete-stale-items`):
+- **Delete stale or large layers from Review**, off unless the build sets `VITE_DELETING=on`. Select layers by dragging a rectangle on the chart, from the list, or one at a time; confirm by typing a word. Never a permanent delete; each layer is checked again first. See [Deleting layers](#deleting-layers-off-by-default).
+- **A click on a chart dot asks** whether to view the item or delete it (Review only; the scan screen still opens the item).
+- **The header shows the version**, the commit and whether deleting is on.
+- **Log scale in weeks** for the Review chart's vertical axis (last used), so recently used layers no longer pile up at the bottom.
 
 **1.3.0** (2 November 2026):
 - **Click a layer for its story.** Monthly usage bars on every row; click for a panel with a usage calendar or monthly bars (12 months or 2 years) and everything that uses the layer, including offline map areas and Survey123 forms.
@@ -225,7 +277,7 @@ Checks: `npm run typecheck && npm run lint && npm test && npm run e2e`.
 - Decluttering is an independent, open-source project. It is not an Esri or Esri Australia product, and it is not endorsed or supported by either.
 - It is provided **"as is", without warranty of any kind**, and without liability for any loss or damage, as set out in the Apache License 2.0 (sections 7 and 8). You use it at your own risk.
 - You are responsible for how you use it in your organisation: whose content you review, and any email you choose to send to colleagues. Check that it fits your organisation's policies first, and send yourself a test before anyone else gets an email.
-- The app never deletes, unshares or changes anyone's items. What an owner does after a nudge is their decision.
+- The app never unshares, moves or edits anyone's items. Deleting is off by default (see [Deleting layers](#deleting-layers-off-by-default)). What an owner does after a nudge is their decision.
 - ArcGIS and Esri are trademarks of Esri. They are used here only to describe what the app works with.
 
 ## Contributing and support

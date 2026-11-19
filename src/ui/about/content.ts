@@ -1,5 +1,6 @@
 // About copy stays data-shaped for tests; values are refreshed from the active catalogue on locale changes.
 import { onLocaleChange, t } from '../../i18n';
+import { deletingCopy } from '../shared/deleting-copy';
 import { PRESETS } from '../../domain/stale';
 
 export type Block = { p: string } | { ul: string[] };
@@ -73,7 +74,7 @@ function refreshAboutCopy(): void {
       ],
     },
   };
-  ABOUT_INTRO = t('about.intro');
+  ABOUT_INTRO = t(deletingCopy('about.intro', 'about.intro.deleting'));
   const p = (key: Parameters<typeof t>[0], params?: Record<string, string | number>): Block => ({ p: t(key, params) });
   const ul = (...keys: Parameters<typeof t>[0][]): Block => ({ ul: keys.map((key) => t(key)) });
   const duration = (days: number) => t(days >= 365 ? 'about.duration.year' : days >= 180 ? 'about.duration.sixMonths' : 'about.duration.threeMonths');
@@ -84,7 +85,7 @@ function refreshAboutCopy(): void {
   };
   ABOUT_SECTIONS = [
     {
-      id: 'what', title: t('about.what.title'), lead: t('about.what.lead'),
+      id: 'what', title: t('about.what.title'), lead: t(deletingCopy('about.what.lead', 'about.what.lead.deleting')),
       detail: [p('about.what.detail.1')],
     },
     {

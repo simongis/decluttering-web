@@ -51,6 +51,10 @@ export class DcOwnerList extends LitElement {
   @property({ type: Boolean }) depsKnown = true;
   @property() sort: SortKey = 'priority';
   @property({ type: Boolean, attribute: 'can-see-usage' }) canSeeUsage = true;
+  /** ADR 0016: whether the user may delete a layer owned by this username (the item panel's Delete button). */
+  @property({ attribute: false }) canDelete: ((owner: string) => boolean) | undefined;
+  /** ADR 0016: the layers chosen for deleting. */
+  @property({ attribute: false }) delSel: ReadonlySet<string> = new Set();
   /** The scan was stopped early (wording only: "not measured", "not checked"). */
   @property({ type: Boolean }) stopped = false;
   /** DC-096: username to extra words for the "Nudged" chip, e.g. "2 of 4 gone". */
@@ -158,7 +162,7 @@ export class DcOwnerList extends LitElement {
   private row(r: Row, on: boolean) {
     const sc = this.scale();
     return html`<dc-family-row .row=${r} .org=${this.org} .why=${this.why(r)} .on=${on} ?selectable=${this.selectable}
-      ?member=${this.member} .done=${this.done.has(r.source.id)} .showUsage=${this.canSeeUsage} .depsKnown=${this.depsKnown} .stopped=${this.stopped}
+      ?member=${this.member} .done=${this.done.has(r.source.id)} ?deletable=${!!this.canDelete?.(r.source.owner)} ?del-selected=${this.delSel.has(r.source.id)} .showUsage=${this.canSeeUsage} .depsKnown=${this.depsKnown} .stopped=${this.stopped}
       .bars=${sc ? rowBars(r.family, sc.ctx) : null} .top=${sc?.top ?? 0} .scanRef=${sc?.ctx.ref ?? 0}></dc-family-row>`;
   }
 
@@ -167,7 +171,7 @@ export class DcOwnerList extends LitElement {
     return html`<svg class="ub-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs><pattern id=${HATCH_ID} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="4" class="hb"></rect><line x1="0" y1="0" x2="0" y2="4" class="hl"></line></pattern></defs></svg>
       ${this.canSeeUsage ? html`<dc-usage-peek .root=${this}></dc-usage-peek>` : nothing}
       <dc-item-panel .data=${this.data} .org=${this.org} .countSweeps=${this.countSweeps} .depsKnown=${this.depsKnown} .stopped=${this.stopped}
-        .member=${this.member} .canSeeUsage=${this.canSeeUsage}></dc-item-panel>`;
+        .member=${this.member} .canSeeUsage=${this.canSeeUsage} .canDelete=${this.canDelete}></dc-item-panel>`;
   }
 
   /**
@@ -175,7 +179,7 @@ export class DcOwnerList extends LitElement {
    * Everything a card draws is in the list, so a change to any of it draws every card again.
    */
   private cardOf(o: OwnerGroup) {
-    return guard([o, this.expanded.has(o.owner.username), this.items, this.done, this.sort, this.selectable, this.member, this.canSeeUsage,
+    return guard([o, this.expanded.has(o.owner.username), this.items, this.done, this.sort, this.selectable, this.member, this.canSeeUsage, this.canDelete, this.delSel,
       this.depsKnown, this.stopped, this.org, this.nudgeNotes.get(o.owner.username), this.thumbs?.get(o.owner.username), getLocale(), this.scale()?.top, this.scale()?.ctx], () => this.card(o));
   }
 

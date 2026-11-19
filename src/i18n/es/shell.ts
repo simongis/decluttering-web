@@ -2,6 +2,12 @@ import type { Message } from '../en/core';
 import type { enShell } from '../en/shell';
 
 export const esShell: Record<keyof typeof enShell, Message> = {
+  'shell.update.text': 'Hay una versión nueva de Decluttering. Recarga para usarla: se mantienen tu configuración y la sesión, y el próximo análisis empieza de cero.',
+  'shell.update.reload': 'Recargar',
+  'shell.update.later': 'Más tarde',
+  'shell.version.title': 'Versión {version}, commit {commit}',
+  'shell.version.deleteOn': 'borrado activado',
+  'shell.version.deleteOff': 'borrado desactivado',
   'shell.scan.stopAndReview': 'Detener y revisar lo que tenemos',
   'shell.scan.stopScanning': 'Detener el análisis',
   'shell.scan.checkingBackground': 'El análisis sigue en segundo plano.',
@@ -115,6 +121,7 @@ export const esShell: Record<keyof typeof enShell, Message> = {
   'tour.row.text': 'Cada fila explica por qué aparece y cuántos créditos consume al mes, aproximadamente. El título abre la capa en ArcGIS Online.',
   'tour.tick.title': 'Un correo por propietario',
   'tour.tick.text': 'Marca a los propietarios a quienes quieras avisar. Cada uno recibirá un único correo resumen amable y no se eliminará nada.',
+  'tour.tick.text.deleting': 'Marca a los propietarios a quienes quieras avisar. Cada uno recibirá un único correo resumen amable, y marcar a un propietario no borra nada.',
   'tour.next.title': 'Después, redacta los correos',
   'tour.next.text': 'Cuando quieras, podrás pasar a redactar los correos. No se enviará nada hasta que tú lo decidas.',
   'tour.next': 'Siguiente',
